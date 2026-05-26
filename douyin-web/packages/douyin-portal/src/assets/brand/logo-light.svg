@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 28">
+  <g font-family="system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif">
+    <text x="10" y="14" font-size="13" font-weight="800" fill="#161823" letter-spacing="-0.3">Do</text>
+    <path d="M28.5 13 C 26 11.4 24.7 10.1 24.7 8.55 C 24.7 7.45 25.5 6.6 26.6 6.6 C 27.5 6.6 28.2 7.1 28.5 7.85 C 28.8 7.1 29.5 6.6 30.4 6.6 C 31.5 6.6 32.3 7.45 32.3 8.55 C 32.3 10.1 31 11.4 28.5 13 Z" fill="#FF2E63"/>
+    <text x="34" y="14" font-size="13" font-weight="800" fill="#161823" letter-spacing="-0.3">Like</text>
+    <text x="10" y="24" font-size="6.5" font-weight="500" fill="#7a7d85" letter-spacing="3.4">都喜欢</text>
+  </g>
+</svg>

@@ -1,0 +1,332 @@
+<script setup lang="ts">
+import { videosCtrolStore } from '@/stores/videos-control'
+import {
+  watchEffect,
+  type PropType,
+  ref,
+  onMounted,
+  onBeforeUnmount,
+  watch
+} from 'vue'
+import swiperPlayer from '../video-player/swiper-player.vue'
+import livePreviewPlayer from '../video-player/live-preview-player.vue'
+import { useElementSize } from '@vueuse/core'
+import { useKeyboardNavigation } from '@/hooks'
+import type { IAwemeInfo } from '@/api/tyeps/common/aweme'
+import { getLiveStreamUrls } from '@/utils/live-stream'
+
+const props = defineProps({
+  videoList: {
+    type: Array as PropType<IAwemeInfo[]>,
+    default: []
+  },
+  // 是否显示 swiper 控制按钮
+  showSwiperControl: {
+    type: Boolean,
+    default: false
+  },
+  // 是否是 modal 模式（全屏弹框）
+  isModal: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const store = videosCtrolStore()
+
+const cachedRange = ref({ start: 0, end: 2 })
+let shrinkTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  () => store.activeVideoIndex,
+  (currentIndex, oldIndex) => {
+    if (shrinkTimer) {
+      clearTimeout(shrinkTimer)
+      shrinkTimer = null
+    }
+    cachedRange.value = {
+      start: Math.max(0, Math.min(currentIndex, oldIndex ?? currentIndex) - 1),
+      end: Math.max(currentIndex, oldIndex ?? currentIndex) + 2
+    }
+    shrinkTimer = setTimeout(() => {
+      cachedRange.value = {
+        start: Math.max(0, currentIndex - 1),
+        end: currentIndex + 2
+      }
+    }, 350)
+  },
+  { immediate: true }
+)
+
+const shouldRender = (index: number) => {
+  return index >= cachedRange.value.start && index <= cachedRange.value.end
+}
+
+const isActiveIndex = (index: number) => index === store.activeVideoIndex
+
+// 解析直播间 rawdata 字符串
+const parseLiveRoomData = (rawdata: string | undefined) => {
+  if (!rawdata) return null
+  try {
+    return JSON.parse(rawdata)
+  } catch {
+    return null
+  }
+}
+
+// 从直播间数据中提取所有可用的直播流 URL（返回数组，支持备用流）
+const getLiveStreamUrlsFromRoom = (roomData: any): string[] => {
+  if (!roomData) return []
+  // 使用工具函数提取流 URL
+  return getLiveStreamUrls(roomData?.stream_url)
+}
+
+const transitionDuration = ref(0)
+const videoHeight = ref()
+const { height } = useElementSize(videoHeight)
+
+const dragOffset = ref(0)
+const accumulatedDelta = ref(0)
+const wheelThreshold = 150
+let lastWheelTime = 0
+const wheelCooldown = 500
+
+watchEffect(() => {
+  store.initTranslateY = height.value + 12
+})
+
+const isDragging = ref(false)
+const isActualDragging = ref(false)
+const startY = ref(0)
+const isSwitching = ref(false)
+const dragThreshold = 10
+let shouldPreventClick = false
+
+// Pointer Events 统一处理鼠标和触摸
+const handlePointerDown = (event: PointerEvent) => {
+  // 只处理主按钮（鼠标左键或触摸）
+  if (event.button !== 0) return
+
+  const target = event.target as HTMLElement
+  // 排除不可拖动的区域：sidebar、按钮、输入框等交互元素
+  const isInteractiveElement = target.closest(
+    'button, a, input, textarea, [data-no-drag], .video-sidebar, .video-action, .xgplayer-controls, .xg-right-grid, .xg-left-grid, .xgplayer-start'
+  )
+  if (isInteractiveElement) return
+
+  // 只在视频容器区域内才能拖动
+  const isInVideoContainer = target.closest(
+    '.videos-container, .slide-video, .base-player, .xgplayer'
+  )
+  if (!isInVideoContainer) return
+
+  isDragging.value = true
+  isActualDragging.value = false
+  startY.value = event.clientY
+  dragOffset.value = 0
+}
+
+const handlePointerMove = (event: PointerEvent) => {
+  if (!isDragging.value) return
+  const deltaY = event.clientY - startY.value
+  if (!isActualDragging.value && Math.abs(deltaY) > dragThreshold) {
+    isActualDragging.value = true
+    transitionDuration.value = 0
+  }
+  if (isActualDragging.value) {
+    dragOffset.value = deltaY
+  }
+}
+
+const handlePointerUp = () => {
+  if (!isDragging.value) return
+  isDragging.value = false
+  if (!isActualDragging.value) {
+    shouldPreventClick = false
+    return
+  }
+  // 发生了实际拖动，需要阻止后续的点击事件
+  shouldPreventClick = true
+  isActualDragging.value = false
+  transitionDuration.value = 250
+  const threshold = height.value / 4
+  if (isSwitching.value) {
+    dragOffset.value = 0
+    return
+  }
+  if (dragOffset.value < -threshold) {
+    isSwitching.value = true
+    store.handleNext()
+    setTimeout(() => {
+      isSwitching.value = false
+    }, 300)
+  } else if (dragOffset.value > threshold) {
+    isSwitching.value = true
+    store.handlePrev()
+    setTimeout(() => {
+      isSwitching.value = false
+    }, 300)
+  }
+  dragOffset.value = 0
+}
+
+// 处理点击事件，在实际拖动后阻止点击
+const handleClick = (event: MouseEvent) => {
+  if (shouldPreventClick) {
+    event.stopPropagation()
+    event.preventDefault()
+    shouldPreventClick = false
+  }
+}
+
+const handleWheel = (event: WheelEvent) => {
+  const target = event.target as HTMLElement
+  const scrollableParent = target.closest('[data-scrollable]')
+  if (scrollableParent) {
+    return
+  }
+  event.preventDefault()
+  const now = Date.now()
+  if (isSwitching.value || now - lastWheelTime < wheelCooldown) return
+  accumulatedDelta.value += event.deltaY
+  if (accumulatedDelta.value > wheelThreshold) {
+    accumulatedDelta.value = 0
+    lastWheelTime = now
+    isSwitching.value = true
+    store.handleNext()
+    setTimeout(() => {
+      isSwitching.value = false
+    }, wheelCooldown)
+  } else if (accumulatedDelta.value < -wheelThreshold) {
+    accumulatedDelta.value = 0
+    lastWheelTime = now
+    isSwitching.value = true
+    store.handlePrev()
+    setTimeout(() => {
+      isSwitching.value = false
+    }, wheelCooldown)
+  }
+}
+
+watch(
+  () => store.activeVideoIndex,
+  () => {
+    transitionDuration.value = 250
+    setTimeout(() => {
+      transitionDuration.value = 0
+    }, 300)
+  }
+)
+
+onMounted(() => {
+  videoHeight.value?.addEventListener('wheel', handleWheel, { passive: false })
+  // 捕获阶段监听 click，在拖动后阻止点击事件传播
+  videoHeight.value?.addEventListener('click', handleClick, true)
+  // 在 document 上监听 pointermove 和 pointerup，确保拖出元素外也能正常工作
+  document.addEventListener('pointermove', handlePointerMove)
+  document.addEventListener('pointerup', handlePointerUp)
+})
+
+onBeforeUnmount(() => {
+  // 清理 shrinkTimer 定时器
+  if (shrinkTimer) {
+    clearTimeout(shrinkTimer)
+    shrinkTimer = null
+  }
+  // 清理所有事件监听器
+  videoHeight.value?.removeEventListener('wheel', handleWheel)
+  videoHeight.value?.removeEventListener('click', handleClick, true)
+  document.removeEventListener('pointermove', handlePointerMove)
+  document.removeEventListener('pointerup', handlePointerUp)
+})
+
+useKeyboardNavigation()
+</script>
+<template>
+  <div
+    class="carousel"
+    :class="{ 'carousel-modal': props.isModal }"
+    ref="videoHeight"
+    @pointerdown="handlePointerDown"
+  >
+    <div
+      class="carousel-inner"
+      :style="{
+        transform: `translate3d(0px, ${store.translateY + dragOffset}px, 0px)`,
+        'transition-duration': `${transitionDuration}ms`
+      }"
+    >
+      <div
+        class="carousel-item"
+        v-for="(item, index) in videoList"
+        :key="item.aweme_id"
+        :id="item.aweme_id"
+        :style="{
+          height: `${height}px`,
+          'margin-bottom': '12px'
+        }"
+      >
+        <swiper-player
+          :class="{ 'swiper-modal': props.isModal }"
+          v-if="
+            (shouldRender(index) && item?.media_type === 4) ||
+            (shouldRender(index) && item?.aweme_type === 68)
+          "
+          :key="item.aweme_id"
+          :aweme-info="item"
+          :isPlay="isActiveIndex(index)"
+          :showSwiperControl="props.showSwiperControl"
+        />
+        <live-preview-player
+          v-if="shouldRender(index) && item?.aweme_type === 101"
+          :key="item.aweme_id"
+          :url="getLiveStreamUrlsFromRoom(parseLiveRoomData(item.cell_room?.rawdata))"
+          :room-data="parseLiveRoomData(item.cell_room?.rawdata)"
+          :is-play="isActiveIndex(index)"
+        />
+      </div>
+    </div>
+  </div>
+</template>
+
+<style lang="scss" scoped>
+.carousel {
+  position: absolute;
+  left: 0;
+  top: calc(0% + 0px);
+  width: 100%;
+  height: calc(100% - 12px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  padding-left: 0px;
+  padding-right: 68px;
+
+  // modal 模式样式
+  &.carousel-modal {
+    padding-right: 0;
+    height: 100%;
+  }
+
+  .carousel-inner {
+    width: 100%;
+    height: 100%;
+    .carousel-item {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      flex-shrink: 0;
+    }
+    @media screen and (max-width: 1240px) {
+      .carousel-item {
+        min-width: 440px;
+      }
+    }
+
+    .swiper-modal {
+      border-radius: 0;
+    }
+  }
+}
+</style>

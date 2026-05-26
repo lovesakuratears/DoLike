@@ -1,0 +1,83 @@
+{
+  "name": "douyin-creator",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --mode dev",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "eslint": "eslint src/ --ext .ts,.tsx,.js,.jsx --fix --cache",
+    "stylelint": "stylelint 'src/**/*.less' 'src/**/*.css' --fix --cache",
+    "pre-commit": "pretty-quick --staged && npm run eslint && npm run stylelint"
+  },
+  "dependencies": {
+    "@antv/g2": "^5.4.8",
+    "@douyinfe/semi-icons": "^2.90.13",
+    "@douyinfe/semi-ui": "^2.90.13",
+    "@loadable/component": "^5.16.7",
+    "@semi-bot/semi-theme-doucreator": "^1.0.22",
+    "@turf/turf": "^7.3.2",
+    "ahooks": "^3.9.6",
+    "axios": "^1.13.2",
+    "bizcharts": "^4.1.23",
+    "classnames": "^2.5.1",
+    "copy-to-clipboard": "^3.3.3",
+    "fabric": "^5.3.0",
+    "lodash": "^4.17.21",
+    "mockjs": "^1.1.0",
+    "nprogress": "^0.2.0",
+    "query-string": "^9.3.1",
+    "react": "^19.2.3",
+    "react-color": "^2.19.3",
+    "react-dom": "^19.2.3",
+    "react-image-crop": "^11.0.10",
+    "react-router": "^7.12.0",
+    "react-router-dom": "^7.12.0",
+    "zustand": "^5.0.10"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.9",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitejs/plugin-react-swc": "^4.2.2",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-babel": "^5.3.1",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "postcss-scss": "^4.0.9",
+    "prettier": "^3.8.0",
+    "pretty-quick": "^4.2.2",
+    "sass": "^1.97.2",
+    "stylelint": "^17.0.0",
+    "stylelint-config-prettier": "^9.0.5",
+    "stylelint-config-standard": "^40.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vite-plugin-svgr": "^4.5.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix --cache"
+    ],
+    "*.{css, less}": [
+      "stylelint --fix"
+    ]
+  }
+}

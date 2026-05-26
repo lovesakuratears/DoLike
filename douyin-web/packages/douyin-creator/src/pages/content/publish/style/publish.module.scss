@@ -1,0 +1,133 @@
+.publish {
+  font-size: 14px;
+  min-height: 845px;
+  background-color: #fff;
+  border-radius: 8px;
+}
+
+.container {
+  flex: 1;
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 40px;
+  overflow: hidden;
+
+  min-height: 100%;
+
+  & > div:first-child {
+    width: 870px;
+    margin: 0 auto 24px;
+  }
+}
+.title {
+  font-style: normal;
+  font-weight: bold;
+  font-size: 24px;
+  line-height: 28px;
+  color: #323538;
+  margin-bottom: 16px;
+}
+.content {
+  display: flex;
+  justify-content: center;
+}
+.content-form {
+  width: 552px;
+  margin-right: 48px;
+}
+.disc-title-content {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: bold;
+  color: #404346;
+  display: flex;
+  align-items: center;
+  line-height: 20px;
+}
+.disc-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.title-text {
+  margin: 24px 0 4px;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+}
+.title-main {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: bold;
+  color: #404346;
+  margin: 0;
+}
+.icon {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  margin-left: 4px;
+  display: inline-block;
+}
+
+.title-other {
+  margin: 24px 0 4px;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+}
+
+.preview {
+  margin-left: 2px;
+
+  .info .first-part {
+    // width: 100%;
+    padding: 10px 12px;
+    background: rgba(46, 50, 56, 0.05);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    .toutiao {
+      display: flex;
+      align-items: center;
+      svg {
+        vertical-align: bottom;
+      }
+      .toutiao-title {
+        margin-left: 8px;
+      }
+    }
+  }
+
+  .third-part {
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .info-sub {
+    font-size: 14px;
+    font-weight: normal;
+    font-style: normal;
+    font-stretch: normal;
+    line-height: 20px;
+    letter-spacing: normal;
+    color: #6b7075;
+  }
+}
+
+.content-confirm-container {
+  margin: 40px 0 0;
+}
+
+// ------------------
+.content-preview {
+  max-height: 700px;
+
+  // ------------------
+}
