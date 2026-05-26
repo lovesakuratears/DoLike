@@ -1,0 +1,182 @@
+// DoLike — Prisma schema
+// 完整模型见 docs/Backend-Architecture.md §4
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================ 本地账号 ============================
+
+model LocalUser {
+  id             Int             @id @default(autoincrement())
+  username       String          @unique
+  passwordHash   String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  sessions       LocalSession[]
+  douyinAccounts DouyinAccount[]
+  folders        LocalFolder[]
+  setting        UserSetting?
+}
+
+model LocalSession {
+  token     String    @id
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  user      LocalUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model UserSetting {
+  userId              Int       @id
+  archiveRoot         String                                 // 数据目录
+  shortVideoSec       Int       @default(60)                 // 长短视频阈值
+  downloadConcurrency Int       @default(3)
+  syncIntervalMin     Int       @default(0)                  // 0=关闭
+  fallbackToOnlineUrl Boolean   @default(true)               // 本地播放失败时回退抖音线上
+  updatedAt           DateTime  @updatedAt
+  user                LocalUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================ 抖音账号 ============================
+
+model DouyinAccount {
+  id            Int       @id @default(autoincrement())
+  localUserId   Int
+  secUid        String    @unique
+  nickname      String
+  avatarUrl     String?
+  cookieEnc     String?                       // 加密 cookie（cloak / manual）；bridge 为 null
+  cookieSource  String                        // 'cloak' | 'manual' | 'bridge'
+  isValid       Boolean   @default(true)
+  lastCheckAt   DateTime?
+  pushToken     String?   @unique             // 方案 C 推送鉴权 token
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          LocalUser @relation(fields: [localUserId], references: [id], onDelete: Cascade)
+  contents      Content[]
+  mixes         Mix[]
+
+  @@index([localUserId])
+}
+
+// ============================ 内容主表 ============================
+
+model Content {
+  id                 Int       @id @default(autoincrement())
+  douyinAccountId    Int
+  awemeId            String                              // 抖音原始 ID
+  kind               String                              // 'VIDEO' | 'MUSIC' | 'MIX_VIDEO'
+  title              String
+  desc               String?
+  authorSecUid       String
+  authorName         String
+  durationSec        Int                                 // 长短筛选用
+  publishAt          DateTime                            // 抖音发布时间
+  archivedAt         DateTime  @default(now())
+  coverPath          String?                             // 本地封面相对路径
+  mediaPath          String?                             // 本地视频/音频相对路径
+  mediaSize          BigInt?
+  originUrl          String?                             // 抖音原 url（兜底）
+  originUrlExpiredAt DateTime?
+  rawMeta            String                              // JSON.stringify 后的原始抖音 JSON
+  status             String    @default("pending")       // pending|downloading|done|failed
+  errorMsg           String?
+  hidden             Boolean   @default(false)            // 用户手动从「视频」Tab 隐藏；保留行用作 awemeId 去重
+  hiddenAt           DateTime?
+  douyinAccount      DouyinAccount @relation(fields: [douyinAccountId], references: [id], onDelete: Cascade)
+  links              ContentLink[]
+  tasks              DownloadTask[]
+  folderItems        FolderItem[]
+
+  @@unique([douyinAccountId, awemeId, kind])
+  @@index([douyinAccountId, publishAt])
+  @@index([durationSec])
+  @@index([status])
+  @@index([hidden])
+}
+
+model LocalFolder {
+  id         Int          @id @default(autoincrement())
+  localUserId Int
+  name       String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  user       LocalUser    @relation(fields: [localUserId], references: [id], onDelete: Cascade)
+  items      FolderItem[]
+
+  @@index([localUserId])
+}
+
+model FolderItem {
+  id        Int         @id @default(autoincrement())
+  folderId   Int
+  contentId Int
+  createdAt DateTime    @default(now())
+  folder    LocalFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  content   Content     @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([folderId, contentId])
+  @@index([contentId])
+}
+
+model ContentLink {
+  id        Int      @id @default(autoincrement())
+  contentId Int
+  linkKind  String                                 // POST | LIKE | FAVORITE | WATCH_LATER | COLLECT_FOLDER | COLLECT_MUSIC | COLLECT_MIX | SELF_MIX
+  folderId  String?                                // 收藏夹 ID
+  mixId     String?                                // 合集 ID
+  linkedAt  DateTime @default(now())
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([contentId, linkKind, folderId, mixId])
+  @@index([linkKind])
+}
+
+// ============================ 合集 ============================
+
+model Mix {
+  id              Int           @id @default(autoincrement())
+  douyinAccountId Int
+  mixId           String
+  kind            String                                  // 'self' | 'collected'
+  name            String
+  authorSecUid    String
+  authorName      String
+  coverPath       String?
+  itemCount       Int           @default(0)
+  publishAt       DateTime?
+  rawMeta         String                                  // JSON.stringify
+  archivedAt      DateTime      @default(now())
+  douyinAccount   DouyinAccount @relation(fields: [douyinAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([douyinAccountId, mixId])
+}
+
+// ============================ 下载队列（持久化） ============================
+
+model DownloadTask {
+  id          Int       @id @default(autoincrement())
+  contentId   Int
+  kind        String                              // 'video' | 'cover' | 'audio'
+  url         String
+  targetPath  String
+  bytesDone   BigInt    @default(0)
+  bytesTotal  BigInt?
+  attempts    Int       @default(0)
+  status      String    @default("queued")        // queued|running|done|failed
+  lastError   String?
+  enqueuedAt  DateTime  @default(now())
+  finishedAt  DateTime?
+  content     Content   @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}

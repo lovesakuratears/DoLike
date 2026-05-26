@@ -1,0 +1,10 @@
+node_modules
+dist
+*.log
+.env
+.env.local
+.DS_Store
+
+# Prisma 生成的 SQLite（开发期可放仓库内便于调试）
+prisma/dev.db
+prisma/dev.db-journal

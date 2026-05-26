@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "DoLike 抖音归档助手",
+  "version": "0.1.1",
+  "description": "把抖音网页端的「我的作品 / 喜欢 / 收藏」推送到本地 DoLike 后端。仅个人备份用，不做内容上传或互动。",
+  "minimum_chrome_version": "110",
+  "action": {
+    "default_title": "DoLike 归档助手",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": [
+    "*://*.douyin.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.douyin.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/*.js"],
+      "matches": ["https://www.douyin.com/*"]
+    }
+  ]
+}

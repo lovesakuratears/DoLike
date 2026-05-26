@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>DoLike 插件绑定</title>
+  <style>
+    :root {
+      --bg: #f5f2e9;
+      --panel: #fffdf7;
+      --ink: #1f1d18;
+      --muted: #746c5f;
+      --line: #ded6c7;
+      --ok: #1f8f53;
+      --err: #c43d3d;
+      --warn: #ad7a17;
+      --accent: #1f1d18;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      width: 360px;
+      min-height: 520px;
+      padding: 16px;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(205, 185, 143, 0.22), transparent 35%),
+        linear-gradient(180deg, #f8f5ee 0%, var(--bg) 100%);
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid rgba(63, 54, 39, 0.08);
+      border-radius: 16px;
+      box-shadow: 0 12px 30px rgba(55, 46, 30, 0.08);
+      padding: 14px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+    p {
+      margin: 0;
+    }
+    .lead {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .section {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px dashed var(--line);
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .section-title strong {
+      font-size: 12px;
+      letter-spacing: .03em;
+    }
+    .lamp {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .lamp-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #bbb2a4;
+      box-shadow: 0 0 0 3px rgba(187, 178, 164, 0.18);
+    }
+    .lamp.ok .lamp-dot {
+      background: var(--ok);
+      box-shadow: 0 0 0 3px rgba(31, 143, 83, 0.18);
+    }
+    .lamp.err .lamp-dot {
+      background: var(--err);
+      box-shadow: 0 0 0 3px rgba(196, 61, 61, 0.16);
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      margin: 10px 0 6px;
+      color: #544c40;
+    }
+    input {
+      width: 100%;
+      padding: 9px 10px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      outline: none;
+    }
+    input:focus {
+      border-color: #9a8661;
+      box-shadow: 0 0 0 3px rgba(154, 134, 97, 0.12);
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    button {
+      appearance: none;
+      border: 1px solid #cbc0ad;
+      background: #fff;
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: .15s ease;
+      flex: 1;
+    }
+    button:hover { transform: translateY(-1px); }
+    button.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    button.ghost {
+      background: #f8f4ec;
+    }
+    .status-box {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #f5f1e8;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #534b3f;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status-box.ok {
+      background: rgba(31, 143, 83, 0.10);
+      color: #13683c;
+    }
+    .status-box.err {
+      background: rgba(196, 61, 61, 0.10);
+      color: #9f2f2f;
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .log-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .log-item {
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: #f7f3eb;
+      border: 1px solid rgba(130, 110, 78, 0.08);
+    }
+    .log-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 4px;
+      font-size: 11px;
+    }
+    .tag {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(31, 29, 24, 0.08);
+    }
+    .tag.ok { background: rgba(31, 143, 83, 0.12); color: #14653c; }
+    .tag.err { background: rgba(196, 61, 61, 0.12); color: #9b2f2f; }
+    .hint {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>DoLike 插件绑定</h1>
+    <p class="lead">先在 DoLike 页面里生成 API Key。这个弹窗只负责配置项目 URL、API Key，并测试插件是否已经和本地项目握手成功。</p>
+
+    <div class="section">
+      <div class="section-title">
+        <strong>连接配置</strong>
+        <span id="connLamp" class="lamp"><span class="lamp-dot"></span><span id="connText">未检测</span></span>
+      </div>
+
+      <label for="backendUrl">项目 URL</label>
+      <input id="backendUrl" type="text" placeholder="http://127.0.0.1:7777" />
+
+      <label for="pushToken">API Key</label>
+      <input id="pushToken" type="password" placeholder="pt_xxxxxxx" />
+
+      <div class="row">
+        <button id="save" class="primary">保存配置</button>
+        <button id="handshake" class="ghost">测试握手</button>
+      </div>
+
+      <div id="status" class="status-box">准备就绪。</div>
+      <p class="hint">绿色表示 URL 可达且 API Key 在当前项目内有效。红色表示 URL、端口、登录态或 API Key 有问题。</p>
+    </div>
+
+    <div class="section">
+      <div class="section-title">
+        <strong>操作</strong>
+        <button id="clearLogs" class="ghost" style="flex:0 0 auto;padding:6px 10px;">清空日志</button>
+      </div>
+      <div class="row">
+        <button data-act="init">绑定插件</button>
+        <button data-act="ping-page">检查抖音页</button>
+      </div>
+      <div class="row">
+        <button data-act="push-post">推送作品</button>
+        <button data-act="push-like">推送喜欢</button>
+      </div>
+      <div class="row">
+        <button data-act="push-favorite">推送收藏</button>
+        <button data-act="push-watch-later">推送稍后再看</button>
+      </div>
+      <div class="row">
+        <button data-act="push-collect-folder">推送收藏夹视频</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">
+        <strong>最近日志</strong>
+        <span class="hint">最近 12 条</span>
+      </div>
+      <ul id="logs" class="log-list"></ul>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
