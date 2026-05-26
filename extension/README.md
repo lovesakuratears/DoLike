@@ -17,7 +17,7 @@
 
 2. 启动 portal 前端并完成本地账号登录：
    ```bash
-   cd /path/to/DoLike/douyin-web/packages/douyin-portal
+   cd /path/to/DoLike/web/packages/douyin-portal
    pnpm dev
    ```
    浏览器打开 `http://127.0.0.1:3000`，注册 / 登录本地账号。

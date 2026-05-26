@@ -2,7 +2,7 @@
 
 > 版本：v0.1（初稿，配套 `PRD.md` v0.1）
 > 范围：本文档仅讨论后端 + 浏览器插件 + 桌面启动壳，前端仅给出"调整指南"
-> 仓库目录约定：在 `DoLike/` 下新增 `server/`（Node 后端）、`extension/`（Chrome 插件）；前端继续用 `douyin-web/packages/douyin-portal`
+> 仓库目录约定：在 `DoLike/` 下新增 `server/`（Node 后端）、`extension/`（Chrome 插件）；前端继续用 `web/packages/douyin-portal`
 
 ---
 
@@ -45,7 +45,7 @@
 3 个独立可部署单元：
 - **server/** — Node.js 本地后端（核心）
 - **extension/** — Chrome MV3 桥接插件（方案 C）
-- **douyin-web/packages/douyin-portal** — 现有 Vue 前端，做减法调整
+- **web/packages/douyin-portal** — 现有 Vue 前端，做减法调整
 
 ---
 
@@ -596,4 +596,3 @@ dolike-archive (Compose)
 - 前端 build 产物由 server 静态托管（合一镜像），用户只需 `docker compose up`。
 - 浏览器插件独立 zip，README 给安装指引。
 - 因 CloakBrowser 镜像有 ~200MB Chromium，单镜像约 800MB-1GB，分发用 GHCR 或私有镜像源。
-
