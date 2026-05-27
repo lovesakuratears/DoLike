@@ -17,7 +17,7 @@
 
 2. 启动 portal 前端并完成本地账号登录：
    ```bash
-   cd /path/to/DoLike/web/packages/douyin-portal
+   cd /path/to/DoLike/web/packages/dolike-portal
    pnpm dev
    ```
    浏览器打开 `http://127.0.0.1:3000`，注册 / 登录本地账号。
@@ -90,7 +90,7 @@ extension/
 
 ## 已知限制（M2 范围内）
 
-- 没有处理收藏夹 / 合集 / 音乐 / 稍后再看 —— 留给 M4
+- 收藏夹 / 合集 / 音乐的后端归档链路已开始接入；插件侧对应推送按钮和端到端联调仍需继续补齐
 - 抖音页面 DOM 变化时浮层按钮可能定位失败 —— 通过弹窗触发是更稳妥的路径
 - 没有图标设计，临时用纯色占位 PNG
 - 没有商店上架计划

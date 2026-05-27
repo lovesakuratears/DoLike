@@ -171,6 +171,7 @@ document.querySelectorAll('button[data-act]').forEach(btn => {
     else if (act === 'push-favorite') sendAction({ type: 'push', linkKind: 'FAVORITE' }, '推送收藏')
     else if (act === 'push-watch-later') sendAction({ type: 'push', linkKind: 'WATCH_LATER' }, '推送稍后再看')
     else if (act === 'push-collect-folder') sendAction({ type: 'push', linkKind: 'COLLECT_FOLDER' }, '推送收藏夹视频')
+    else if (act === 'push-collect-music') sendAction({ type: 'push', linkKind: 'COLLECT_MUSIC' }, '推送收藏音乐')
   })
 })
 

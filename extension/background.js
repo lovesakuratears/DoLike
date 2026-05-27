@@ -94,6 +94,8 @@ async function actionPushList(linkKind) {
     items = await callCollector(tab.id, 'collectCollectVideoList', [{ maxPages: 200 }])
   } else if (linkKind === 'WATCH_LATER') {
     items = await callCollector(tab.id, 'collectWatchLaterList', [{ maxPages: 200 }])
+  } else if (linkKind === 'COLLECT_MUSIC') {
+    items = await callCollector(tab.id, 'collectCollectMusicList', [{ maxPages: 200 }])
   } else if (linkKind === 'COLLECT_FOLDER') {
     items = await callCollector(tab.id, 'collectCollectFolderVideoList', [{ maxPages: 200 }])
   } else {

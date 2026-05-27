@@ -356,6 +356,44 @@ if (window.bootstrapCollectorsLoaded) {
       return hydrateAwemesByDetail(out, { pageDelayMs: 120 })
     }
 
+
+    async function collectCollectMusicList(opts = {}) {
+      const { pageDelayMs = 800, maxPages = 200 } = opts
+      const out = []
+      let cursor = 0
+
+      for (let page = 0; page < maxPages; page++) {
+        let r = null
+        const candidates = [
+          { path: '/aweme/v1/web/music/listcollection/', query: { count: 20, cursor } },
+          { path: '/aweme/v1/web/music/collect/list/', query: { count: 20, cursor } },
+          { path: '/aweme/v1/web/music/list/', query: { count: 20, cursor } }
+        ]
+        for (const c of candidates) {
+          try {
+            r = await dyGet(c.path, c.query)
+            if (r && typeof r === 'object') break
+          } catch (e) {
+            void e
+          }
+        }
+        if (!r) break
+
+        const items = Array.isArray(r?.music_list) ? r.music_list
+          : Array.isArray(r?.aweme_list) ? r.aweme_list
+          : Array.isArray(r?.data) ? r.data
+          : []
+        if (items.length === 0) break
+        out.push(...items)
+        if (!r?.has_more) break
+        cursor = Number(r?.cursor) || cursor + items.length
+        await new Promise(res => setTimeout(res, pageDelayMs))
+      }
+
+      if (out.length === 0) return fallbackVisibleAwemes()
+      return out
+    }
+
     window.__DOLIKE__ = window.__DOLIKE__ || {}
     window.__DOLIKE__.collectSelfProfile = collectSelfProfile
     window.__DOLIKE__.collectPostList = collectPostList
@@ -363,5 +401,6 @@ if (window.bootstrapCollectorsLoaded) {
     window.__DOLIKE__.collectCollectVideoList = collectCollectVideoList
     window.__DOLIKE__.collectWatchLaterList = collectWatchLaterList
     window.__DOLIKE__.collectCollectFolderVideoList = collectCollectFolderVideoList
+    window.__DOLIKE__.collectCollectMusicList = collectCollectMusicList
   })()
 }
