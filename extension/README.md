@@ -20,7 +20,7 @@
    cd /path/to/DoLike/web/packages/dolike-portal
    pnpm dev
    ```
-   浏览器打开 `http://127.0.0.1:3000`，注册 / 登录本地账号。
+   浏览器打开 `http://127.0.0.1:3002`，注册 / 登录本地账号。
 
 3. 在 portal 的「我的归档 → 绑定浏览器插件」流程里申请一个 `pt_*` API Key。  
    （没有 UI 时也可以 `curl -X POST http://127.0.0.1:7777/api/douyin/accounts/bridge/issue ...` 拿 token —— 取决于你的版本。）
@@ -40,7 +40,7 @@
 
 7. 进入你自己的主页 `https://www.douyin.com/user/<SELF_SEC_UID>`，再点扩展弹窗里的：
    - **绑定账号 (init)**：把当前抖音账号信息上送到后端，建立映射
-   - **推送 个人作品 / 喜欢 / 收藏**：拉取页面 API 的 aweme 列表后透传到后端入库
+   - **推送 个人作品 / 喜欢 / 收藏 / 稍后再看 / 收藏夹视频 / 收藏音乐**：拉取页面 API 的列表后透传到后端入库
 
 ---
 
@@ -90,7 +90,7 @@ extension/
 
 ## 已知限制（M2 范围内）
 
-- 收藏夹 / 合集 / 音乐的后端归档链路已开始接入；插件侧对应推送按钮和端到端联调仍需继续补齐
+- 插件已支持 6 种 linkKind 推送（POST/LIKE/FAVORITE/WATCH_LATER/COLLECT_FOLDER/COLLECT_MUSIC）；待真实环境联调
 - 抖音页面 DOM 变化时浮层按钮可能定位失败 —— 通过弹窗触发是更稳妥的路径
 - 没有图标设计，临时用纯色占位 PNG
 - 没有商店上架计划
@@ -101,5 +101,5 @@ extension/
 
 - 扩展**不读取** `HttpOnly` 的抖音 cookie（manifest 没有 `cookies` 权限）
 - 推送 token 是后端按账号下发的 `pt_*` 字符串，**只对应一个抖音账号**，撤销由后端控制
-- 后端只接受来自 `127.0.0.1` 的请求；扩展也只允许 `host_permissions = ["http://127.0.0.1/*"]`
+- 后端只接受来自 `127.0.0.1` 的请求；扩展 `host_permissions` 已配置 `http://127.0.0.1/*` 和 `http://localhost/*`
 - 不会发起任何对抖音的写操作（点赞 / 评论 / 关注 / 私信均未实现）
