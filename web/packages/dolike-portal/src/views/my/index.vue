@@ -48,6 +48,7 @@ const selectTab = (t: Tab) => {
 
 type Duration = 'short' | 'long'
 const duration = ref<Duration | null>(null)
+const keyword = ref("")
 
 const accountsRef = ref<InstanceType<typeof AccountsPanel> | null>(null)
 const videoGridRef = ref<InstanceType<typeof VideoGrid> | null>(null)
@@ -176,6 +177,15 @@ document.title = '都喜欢-DoLike'
               </button>
             </div>
           </div>
+          <div class="search-input">
+            <input
+              v-model="keyword"
+              type="text"
+              placeholder="搜索标题、描述、作者…"
+              @keyup.enter="videoGridRef?.refresh()"
+            />
+            <button v-if="keyword" class="search-clear" type="button" @click="keyword = ''; videoGridRef?.refresh()">x</button>
+          </div>
         </div>
         <template v-if="activeLink === 'FOLDERS'">
           <div v-if="activeFolder" class="folder-head">
@@ -191,6 +201,7 @@ document.title = '都喜欢-DoLike'
             v-else
             ref="videoGridRef"
             :folder-id="activeFolder.id"
+            :keyword="keyword || undefined"
             @play="onPlay"
             @folders-changed="onFoldersChanged"
           />
@@ -377,6 +388,49 @@ document.title = '都喜欢-DoLike'
         color: var(--color-primary);
         border-color: rgba(var(--primary-500), 0.18);
         box-shadow: inset 0 0 0 1px rgba(var(--primary-500), 0.06);
+      }
+    }
+  }
+
+  .search-input {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 360px;
+
+    input {
+      width: 100%;
+      padding: 8px 32px 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--color-line-l3, #ddd);
+      background: rgba(var(--white), 0.8);
+      font-size: 13px;
+      color: var(--color-text-t1);
+      outline: none;
+      transition: border-color 0.2s;
+
+      &:focus {
+        border-color: rgba(var(--primary-500), 0.4);
+        box-shadow: 0 0 0 3px rgba(var(--primary-500), 0.08);
+      }
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: none;
+      background: transparent;
+      color: var(--color-text-t3, #888);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      border-radius: 50%;
+
+      &:hover {
+        color: var(--color-text-t1);
+        background: rgba(var(--neutral-100), 0.8);
       }
     }
   }
