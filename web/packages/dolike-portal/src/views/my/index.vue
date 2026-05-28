@@ -53,6 +53,7 @@ const keyword = ref("")
 const accountsRef = ref<InstanceType<typeof AccountsPanel> | null>(null)
 const videoGridRef = ref<InstanceType<typeof VideoGrid> | null>(null)
 const folderGridRef = ref<InstanceType<typeof FolderGrid> | null>(null)
+const musicShelfRef = ref<InstanceType<typeof MusicShelf> | null>(null)
 const playing = ref<VideoListItem | null>(null)
 const activeFolder = ref<FolderListItem | null>(null)
 const mixes = ref<MixListItem[]>([])
@@ -64,6 +65,11 @@ const onPlay = (item: VideoListItem) => {
 }
 const onClosePlayer = () => {
   playing.value = null
+}
+
+const onSearch = () => {
+  videoGridRef.value?.refresh()
+  musicShelfRef.value?.refresh()
 }
 
 const onBound = () => {
@@ -144,6 +150,19 @@ document.title = '都喜欢-DoLike'
       </button>
     </nav>
 
+    <div class="global-search">
+      <div class="global-search-input">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <input
+          v-model="keyword"
+          type="text"
+          placeholder="搜索标题、描述、作者…"
+          @keyup.enter="onSearch"
+        />
+        <button v-if="keyword" class="search-clear" type="button" @click="keyword = ''; onSearch()">✕</button>
+      </div>
+    </div>
+
     <main class="my-content">
       <div v-if="activeTab === 'videos'">
         <div class="videos-toolbar">
@@ -177,15 +196,6 @@ document.title = '都喜欢-DoLike'
               </button>
             </div>
           </div>
-          <div class="search-input">
-            <input
-              v-model="keyword"
-              type="text"
-              placeholder="搜索标题、描述、作者…"
-              @keyup.enter="videoGridRef?.refresh()"
-            />
-            <button v-if="keyword" class="search-clear" type="button" @click="keyword = ''; videoGridRef?.refresh()">x</button>
-          </div>
         </div>
         <template v-if="activeLink === 'FOLDERS'">
           <div v-if="activeFolder" class="folder-head">
@@ -217,7 +227,7 @@ document.title = '都喜欢-DoLike'
         />
       </div>
       <div v-else-if="activeTab === 'music'">
-        <MusicShelf @play="onPlay" />
+        <MusicShelf ref="musicShelfRef" :keyword="keyword" @play="onPlay" />
       </div>
       <div v-else>
         <div v-if="mixesLoading" class="placeholder">
@@ -392,45 +402,57 @@ document.title = '都喜欢-DoLike'
     }
   }
 
-  .search-input {
-    position: relative;
-    flex: 1;
-    min-width: 200px;
-    max-width: 360px;
+  .global-search {
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--color-line-l3, #eee);
+    border-radius: 18px;
+    background: rgba(var(--white), 0.9);
 
-    input {
-      width: 100%;
-      padding: 8px 32px 8px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--color-line-l3, #ddd);
-      background: rgba(var(--white), 0.8);
-      font-size: 13px;
-      color: var(--color-text-t1);
-      outline: none;
-      transition: border-color 0.2s;
+    .global-search-input {
+      position: relative;
+      display: flex;
+      align-items: center;
 
-      &:focus {
-        border-color: rgba(var(--primary-500), 0.4);
-        box-shadow: 0 0 0 3px rgba(var(--primary-500), 0.08);
+      .search-icon {
+        position: absolute;
+        left: 14px;
+        color: var(--color-text-t3, #888);
+        pointer-events: none;
       }
-    }
 
-    .search-clear {
-      position: absolute;
-      right: 8px;
-      top: 50%;
-      transform: translateY(-50%);
-      border: none;
-      background: transparent;
-      color: var(--color-text-t3, #888);
-      cursor: pointer;
-      font-size: 14px;
-      padding: 2px 4px;
-      border-radius: 50%;
-
-      &:hover {
+      input {
+        width: 100%;
+        padding: 10px 36px 10px 38px;
+        border-radius: 999px;
+        border: 1px solid var(--color-line-l3, #ddd);
+        background: rgba(var(--white), 0.8);
+        font-size: 14px;
         color: var(--color-text-t1);
-        background: rgba(var(--neutral-100), 0.8);
+        outline: none;
+        transition: border-color 0.2s;
+
+        &:focus {
+          border-color: rgba(var(--primary-500), 0.4);
+          box-shadow: 0 0 0 3px rgba(var(--primary-500), 0.08);
+        }
+      }
+
+      .search-clear {
+        position: absolute;
+        right: 10px;
+        border: none;
+        background: transparent;
+        color: var(--color-text-t3, #888);
+        cursor: pointer;
+        font-size: 16px;
+        padding: 2px 6px;
+        border-radius: 50%;
+
+        &:hover {
+          color: var(--color-text-t1);
+          background: rgba(var(--neutral-100), 0.8);
+        }
       }
     }
   }

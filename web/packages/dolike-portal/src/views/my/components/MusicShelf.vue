@@ -4,6 +4,10 @@ import { onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { localApi, type VideoListItem } from '@/api/local'
 
+const props = defineProps<{
+  keyword?: string
+}>()
+
 const emit = defineEmits<{
   (e: 'play', item: VideoListItem): void
 }>()
@@ -13,7 +17,6 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(24)
 const loading = ref(false)
-const keyword = ref("")
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / size.value)))
 
 const fetchList = async () => {
@@ -26,7 +29,7 @@ const fetchList = async () => {
       page: page.value,
       size: size.value,
       sort: 'archived',
-      q: keyword.value || undefined
+      q: props.keyword || undefined
     })
     if (r.code === 0) {
       items.value = r.data.items
@@ -85,7 +88,8 @@ const goPage = (next: number) => {
   page.value = Math.max(1, Math.min(totalPages.value, next))
 }
 
-watch(page, () => {
+watch([page, () => props.keyword], () => {
+  page.value = 1
   void fetchList()
 }, { immediate: true })
 
@@ -104,15 +108,7 @@ onBeforeUnmount(closeProgressWs)
         <h2>本地音频馆</h2>
         <p class="summary">已归档 {{ total }} 个媒体文件，点击任意卡片即可播放。</p>
       </div>
-      <div class="music-search">
-        <input
-          v-model="keyword"
-          type="text"
-          placeholder="搜索音乐标题、作者…"
-          @keyup.enter="fetchList()"
-        />
-        <button v-if="keyword" class="search-clear" type="button" @click="keyword = ''; fetchList()">x</button>
-      </div>
+
     </div>
 
     <div v-if="loading && items.length === 0" class="state">加载中…</div>
@@ -174,48 +170,6 @@ onBeforeUnmount(closeProgressWs)
   .summary {
     margin: 0;
     color: var(--color-text-t2, #666);
-  }
-
-  .music-search {
-    position: relative;
-    margin-top: 14px;
-    max-width: 360px;
-
-    input {
-      width: 100%;
-      padding: 8px 32px 8px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--color-line-l3, #ddd);
-      background: rgba(var(--white), 0.9);
-      font-size: 13px;
-      color: var(--color-text-t1);
-      outline: none;
-      transition: border-color 0.2s;
-
-      &:focus {
-        border-color: rgba(var(--primary-500), 0.4);
-        box-shadow: 0 0 0 3px rgba(var(--primary-500), 0.08);
-      }
-    }
-
-    .search-clear {
-      position: absolute;
-      right: 8px;
-      top: 50%;
-      transform: translateY(-50%);
-      border: none;
-      background: transparent;
-      color: var(--color-text-t3, #888);
-      cursor: pointer;
-      font-size: 14px;
-      padding: 2px 4px;
-      border-radius: 50%;
-
-      &:hover {
-        color: var(--color-text-t1);
-        background: rgba(var(--neutral-100), 0.8);
-      }
-    }
   }
 
   .state {
