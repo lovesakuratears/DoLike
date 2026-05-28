@@ -2,7 +2,7 @@ import type { ApiCategory } from '@/types/api'
 
 /**
  * 抖音 API 注册表
- * 基于 douyin-portal 项目的 API 定义
+ * 基于 dolike-portal 项目的 API 定义
  */
 export const apiRegistry: ApiCategory[] = [
   {

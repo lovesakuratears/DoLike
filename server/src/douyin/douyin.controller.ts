@@ -7,6 +7,7 @@ import * as session from './session.service.js'
 import { pasteCookie } from './manual.driver.js'
 import { startCloakSession, getSession, cancelSession } from './cloak.driver.js'
 import { preIssueToken, revokeToken } from './bridge.service.js'
+import { getPrisma } from '../core/db.js'
 
 const idParam = z.object({ id: z.coerce.number().int().positive() })
 
@@ -33,8 +34,8 @@ function handleApp(reply: FastifyReply, err: unknown): boolean {
 
 export default async function douyinRoutes(app: FastifyInstance) {
   // 列表
-  app.get('/api/douyin/accounts', async (req) => {
-    const user = requireAuth(req, req.server as unknown as FastifyReply)
+  app.get('/api/douyin/accounts', async (req, reply) => {
+    const user = requireAuth(req, reply)
     const list = await session.listAccountDTOs(user.id)
     return ok(list)
   })
@@ -48,6 +49,58 @@ export default async function douyinRoutes(app: FastifyInstance) {
       return ok(dto)
     } catch (err) {
       if (handleZod(reply, err)) return
+      if (handleApp(reply, err)) return
+      throw err
+    }
+  })
+
+  // ★ Cookie 校验 —— 测试 cookie 是否有效（不绑定账号，仅探测）
+  // 标记: COOKIE_VALIDATE_ENDPOINT
+  app.post('/api/douyin/accounts/cookie-validate', async (req, reply) => {
+    try {
+      const user = requireAuth(req, reply)
+      const { cookie } = manualSchema.parse(req.body)
+      const profile = await session.probeProfile(cookie)
+      return ok({
+        valid: true,
+        secUid: profile.secUid,
+        nickname: profile.nickname,
+        avatarUrl: profile.avatarUrl
+      })
+    } catch (err) {
+      if (handleZod(reply, err)) return
+      if (handleApp(reply, err)) return
+      throw err
+    }
+  })
+
+  // ★ 查询账号归档模式 —— 根据已有 content 数量判断全量/增量
+  // 标记: ARCHIVE_MODE_ENDPOINT
+  app.get('/api/douyin/accounts/:id/archive-mode', async (req, reply) => {
+    try {
+      const user = requireAuth(req, reply)
+      const { id } = idParam.parse(req.params)
+      const prisma = getPrisma()
+      const acc = await prisma.douyinAccount.findUnique({
+        where: { id, localUserId: user.id }
+      })
+      if (!acc) {
+        reply.status(404).send(fail(ERR.DOUYIN_ACCOUNT_NOT_FOUND, '账号不存在'))
+        return
+      }
+      const contentCount = await prisma.content.count({
+        where: { douyinAccountId: id }
+      })
+      // 没有任何内容 → 全量；有内容 → 增量
+      const mode = contentCount === 0 ? 'full' : 'incremental'
+      return ok({
+        accountId: id,
+        mode,
+        contentCount,
+        hasCookie: !!acc.cookieEnc,
+        cookieSource: acc.cookieSource
+      })
+    } catch (err) {
       if (handleApp(reply, err)) return
       throw err
     }

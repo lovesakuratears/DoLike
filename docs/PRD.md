@@ -110,7 +110,7 @@
 
 ### 3.3 归档内容范围
 
-需要归档的内容类型与对应抖音接口已在 `packages/douyin-portal/src/api/urls.ts` 中实现拉取：
+需要归档的内容类型与对应抖音接口已在 `packages/dolike-portal/src/api/urls.ts` 中实现拉取：
 
 | 类型 | 数据源接口 | 归档物 |
 | --- | --- | --- |
@@ -276,7 +276,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Browser (Vue 3 + xgplayer)  ← 现有 douyin-portal 改造        │
+│  Browser (Vue 3 + xgplayer)  ← 现有 dolike-portal 改造        │
 │       │                                                       │
 │       │  HTTP / WebSocket (localhost:7777)                    │
 │       ▼                                                       │

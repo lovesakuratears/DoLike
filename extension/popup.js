@@ -8,10 +8,16 @@ const $ = id => document.getElementById(id)
 
 const elBackend = $('backendUrl')
 const elToken = $('pushToken')
+const elCookie = $('cookie')
 const elStatus = $('status')
 const elLogs = $('logs')
 const elConnLamp = $('connLamp')
 const elConnText = $('connText')
+const elCdpPort = $('cdpPort')
+const elCookieBadge = $('cookieBadge')
+const elCookieCount = $('cookieCount')
+const elCookieResult = $('cookieResult')
+const elCookieStatusHint = $('cookieStatusHint')
 
 function nowText() {
   const d = new Date()
@@ -29,10 +35,7 @@ async function saveLogs(logs) {
 
 async function appendLog(level, title, detail) {
   const next = [{
-    at: nowText(),
-    level,
-    title,
-    detail: detail || ''
+    at: nowText(), level, title, detail: detail || ''
   }, ...(await loadLogs())].slice(0, MAX_LOGS)
   await saveLogs(next)
   renderLogs(next)
@@ -82,26 +85,28 @@ async function init() {
   const cfg = await loadConfig()
   elBackend.value = cfg.backendUrl
   elToken.value = cfg.pushToken
+  elCookie.value = cfg.cookie || ''
   renderLogs(await loadLogs())
   if (!cfg.pushToken) {
     setLamp('', '未配置')
     setStatus('请先填写 API Key 和项目 URL。')
   } else if (!isTokenLikelyValid(cfg.pushToken)) {
     setLamp('err', 'Key 异常')
-    setStatus('API Key 格式异常，应以 pt_ 开头。', 'err')
+    setStatus('API Key 格式异常，应以 pt_开头。', 'err')
   } else {
     setLamp('', '待测试')
-    setStatus('配置已加载，点击“测试握手”验证。')
+    setStatus('配置已加载，点击「测试握手」验证。')
   }
 }
 
 async function persistConfig() {
   await saveConfig({
     backendUrl: elBackend.value,
-    pushToken: elToken.value
+    pushToken: elToken.value,
+    cookie: elCookie.value
   })
   setStatus('配置已保存。')
-  await appendLog('info', '保存配置', `URL=${elBackend.value || '(空)'}，API Key 已更新`)
+  await appendLog('info', '保存配置', `URL=${elBackend.value || '(空)'}，Cookie ${elCookie.value ? '已填写' : '未填写'}`)
 }
 
 async function doHandshake() {
@@ -120,38 +125,83 @@ async function doHandshake() {
   }
 }
 
-function sendAction(payload, label) {
-  setStatus(`${label} 进行中…`)
-  chrome.runtime.sendMessage(payload, async resp => {
+// ─── Cookie 采集（M1 chrome.cookies API） ────────────────────────────
+// 标记: COOKIE_COLLECT_M1 — 绑定插件时自动调用，获取 douyin.com Cookie
+
+// Cookie 绑定已改为在 portal 页面手动粘贴
+
+function handleResponse(resp, label, type) {
+  if (chrome.runtime.lastError) {
+    const msg = `扩展通信失败：${chrome.runtime.lastError.message}`
+    setStatus(msg, 'err')
+    appendLog('err', label, msg)
+    return
+  }
+  if (resp?.ok) {
+    let msg = type === 'ping' ? '抖音页面可用' : `${label}成功`
+    if (type === 'init') {
+      const nickname = resp?.data?.profile?.nickname || resp?.data?.dto?.nickname || '抖音用户'
+      msg = `绑定成功：${nickname}`
+    } else if (type === 'push') {
+      const pushed = Number(resp?.data?.pushed || 0)
+      const nickname = resp?.data?.profile?.nickname || '抖音用户'
+      msg = pushed > 0
+        ? `${label}成功：${nickname}，采集 ${pushed} 条`
+        : `${label}成功：${nickname}，采集 0 条（请确认当前页面已加载对应列表）`
+    }
+    setStatus(msg, 'ok')
+    appendLog('ok', label, msg)
+  } else {
+    const msg = `${label}失败：${resp?.error || '未知错误'}`
+    setStatus(msg, 'err')
+    appendLog('err', label, msg)
+  }
+}
+
+// ─── 高级 Cookie 采集（M2/M3/M4，折叠区） ────────────────────────────
+// 标记: COOKIE_ADVANCED_METHODS — 代码保留，UI 默认隐藏
+
+async function collectCookiesAdvanced(method) {
+  const label = `方法${method}采集`
+  setStatus(`${label}中…`)
+
+  const msg = {
+    type: 'collectCookies',
+    method: method === 'all' ? 'all' : Number(method),
+    cdpPort: Number(elCdpPort?.value) || 9222
+  }
+  if (method === 'all') msg.includeNative = true
+
+  chrome.runtime.sendMessage(msg, async resp => {
     if (chrome.runtime.lastError) {
-      const msg = `扩展通信失败：${chrome.runtime.lastError.message}`
-      setStatus(msg, 'err')
-      await appendLog('err', label, msg)
+      setStatus(`扩展通信失败：${chrome.runtime.lastError.message}`, 'err')
       return
     }
     if (resp?.ok) {
-      let msg = payload.type === 'ping'
-        ? '抖音页面可用'
-        : `${label}成功`
-      if (payload.type === 'init') {
-        const nickname = resp?.data?.profile?.nickname || resp?.data?.dto?.nickname || '抖音用户'
-        msg = `绑定成功：${nickname}`
-      } else if (payload.type === 'push') {
-        const pushed = Number(resp?.data?.pushed || 0)
-        const nickname = resp?.data?.profile?.nickname || '抖音用户'
-        msg = pushed > 0
-          ? `${label}成功：${nickname}，采集 ${pushed} 条`
-          : `${label}成功：${nickname}，采集 0 条（请确认当前页面已加载对应列表）`
+      const data = resp.data
+      const totalCount = data.results?.reduce((sum, r) => sum + (r.count || 0), 0) || 0
+      setStatus(`共拿到 ${totalCount} 个 Cookie`, totalCount > 0 ? 'ok' : 'err')
+      appendLog(totalCount > 0 ? 'ok' : 'warn', label, `拿到 ${totalCount} 个 Cookie，${data.errors?.length || 0} 个方法失败`)
+
+      // 自动填充
+      for (const r of data.results || []) {
+        if (r.cookies?.length > 0) {
+          const cookieStr = r.cookies.map(c => `${c.name}=${c.value}`).join('; ')
+          elCookie.value = cookieStr
+          const cfg = await loadConfig()
+          cfg.cookie = cookieStr
+          await saveConfig(cfg)
+          break
+        }
       }
-      setStatus(msg, 'ok')
-      await appendLog('ok', label, msg)
     } else {
-      const msg = `${label}失败：${resp?.error || '未知错误'}`
-      setStatus(msg, 'err')
-      await appendLog('err', label, msg)
+      setStatus(`${label}失败：${resp?.error || '未知错误'}`, 'err')
+      appendLog('err', label, resp?.error || '未知错误')
     }
   })
 }
+
+// ─── 事件绑定 ────────────────────────────────────────────────────────
 
 $('save').addEventListener('click', persistConfig)
 $('handshake').addEventListener('click', doHandshake)
@@ -174,5 +224,22 @@ document.querySelectorAll('button[data-act]').forEach(btn => {
     else if (act === 'push-collect-music') sendAction({ type: 'push', linkKind: 'COLLECT_MUSIC' }, '推送收藏音乐')
   })
 })
+
+// 高级折叠区
+$('advancedToggle')?.addEventListener('click', () => {
+  const content = $('advancedContent')
+  const toggle = $('advancedToggle')
+  const arrow = toggle.querySelector('.arrow')
+  const isOpen = content.classList.toggle('show')
+  arrow.textContent = isOpen ? '▼' : '▶'
+})
+
+// 高级采集按钮
+document.querySelectorAll('[data-cookie-method]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    collectCookiesAdvanced(btn.getAttribute('data-cookie-method'))
+  })
+})
+$('cookieCollectAllAdvanced')?.addEventListener('click', () => collectCookiesAdvanced('all'))
 
 init()

@@ -160,10 +160,35 @@ export interface AwemeListItem {
   [key: string]: unknown
 }
 
+export interface CollectedMusicItem {
+  id?: number | string
+  id_str?: string
+  [key: string]: unknown
+}
+
+export interface MixInfoItem {
+  mix_id?: string
+  mix_name?: string
+  create_time?: number | string
+  author?: {
+    sec_uid?: string
+    nickname?: string
+  }
+  cover_url?: { url_list?: string[] }
+  statis?: {
+    updated_to_episode?: number
+  }
+  [key: string]: unknown
+}
+
 const POST_PATH = '/aweme/v1/web/aweme/post/'
 const LIKE_PATH = '/aweme/v1/web/aweme/favorite/'
 const COLLECTS_LIST_PATH = '/aweme/v1/web/collects/list/'
 const COLLECTS_VIDEO_LIST_PATH = '/aweme/v1/web/collects/video/list/'
+const COLLECT_MUSIC_PATH = '/aweme/v1/web/music/listcollection/'
+const USER_MIX_PATH = '/aweme/v1/web/mix/list/'
+const USER_MIX_DETAIL_PATH = '/aweme/v1/web/mix/aweme/'
+const COLLECT_MIX_PATH = '/aweme/v1/web/mix/listcollection/'
 
 export async function fetchUserPostPage(
   localUserId: number,
@@ -235,6 +260,53 @@ export async function fetchCollectsVideoList(
     count: params.count,
     version_code: '170400',
     version_name: '17.4.0'
+  })
+}
+
+export async function fetchUserCollectMusic(
+  localUserId: number,
+  account: DouyinAccount,
+  params: { cursor: number; count: number }
+): Promise<DyResponse<{ status_code?: number; has_more?: boolean | number; cursor?: number; mc_list?: CollectedMusicItem[] }>> {
+  return dyGetSigned(localUserId, account, COLLECT_MUSIC_PATH, {
+    cursor: params.cursor,
+    count: params.count
+  })
+}
+
+export async function fetchUserMixList(
+  localUserId: number,
+  account: DouyinAccount,
+  params: { sec_user_id: string; cursor: string; count: number; list_scene?: number }
+): Promise<DyResponse<{ status_code?: number; has_more?: boolean | number; cursor?: string; mix_infos?: MixInfoItem[] }>> {
+  return dyGetSigned(localUserId, account, USER_MIX_PATH, {
+    sec_user_id: params.sec_user_id,
+    cursor: params.cursor,
+    count: params.count,
+    list_scene: params.list_scene ?? 1
+  })
+}
+
+export async function fetchUserMixDetail(
+  localUserId: number,
+  account: DouyinAccount,
+  params: { mix_id: string; cursor: number; count: number }
+): Promise<DyResponse<SignedListResp<AwemeListItem> & { mix_info?: MixInfoItem }>> {
+  return dyGetSigned(localUserId, account, USER_MIX_DETAIL_PATH, {
+    mix_id: params.mix_id,
+    cursor: params.cursor,
+    count: params.count
+  })
+}
+
+export async function fetchUserCollectMix(
+  localUserId: number,
+  account: DouyinAccount,
+  params: { cursor: string; count: number }
+): Promise<DyResponse<{ status_code?: number; has_more?: boolean | number; cursor?: string; mix_infos?: MixInfoItem[] }>> {
+  return dyGetSigned(localUserId, account, COLLECT_MIX_PATH, {
+    cursor: params.cursor,
+    count: params.count
   })
 }
 

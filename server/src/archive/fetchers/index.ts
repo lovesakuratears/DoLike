@@ -6,8 +6,12 @@
 import type { DouyinAccount } from '@prisma/client'
 import {
   fetchCollectsVideoList,
+  fetchUserCollectMusic,
+  fetchUserCollectMix,
   fetchUserCollectsList,
   fetchUserLikePage,
+  fetchUserMixDetail,
+  fetchUserMixList,
   fetchUserPostPage,
   type AwemeListItem
 } from '../../douyin/dy-client.js'
@@ -123,4 +127,116 @@ export async function* paginateUserCollectVideo(opts: FetcherOpts): AsyncGenerat
       await sleep(opts.pageDelayMs ?? 800)
     }
   }
+}
+
+export async function* paginateUserCollectMusic(opts: FetcherOpts): AsyncGenerator<Record<string, unknown>> {
+  let cursor = 0
+  for (let safety = 0; safety < 200; safety++) {
+    const r = await fetchUserCollectMusic(opts.localUserId, opts.account, {
+      cursor,
+      count: PAGE_SIZE
+    })
+    if (!r.data) return
+    const list = r.data.mc_list ?? []
+    for (const it of list) {
+      const id = String(it.id_str ?? it.id ?? '')
+      if (!id) continue
+      if (!opts.full && opts.knownIds && opts.knownIds.has(id)) return
+      yield it
+    }
+    if (!r.data.has_more) return
+    const nx = Number(r.data.cursor ?? 0)
+    if (!Number.isFinite(nx) || nx === cursor) return
+    cursor = nx
+    await sleep(opts.pageDelayMs ?? 800)
+  }
+}
+
+async function* paginateMixVideos(
+  opts: FetcherOpts,
+  mixes: Array<{ mixId: string }>
+): AsyncGenerator<AwemeListItem> {
+  for (const mix of mixes) {
+    let cursor = 0
+    for (let safety = 0; safety < 200; safety++) {
+      const r = await fetchUserMixDetail(opts.localUserId, opts.account, {
+        mix_id: mix.mixId,
+        cursor,
+        count: PAGE_SIZE
+      })
+      if (!r.data) break
+      const list = r.data.aweme_list ?? []
+      for (const it of list) {
+        if (it.aweme_id) {
+          ;(it as { __mixId?: string }).__mixId = mix.mixId
+          yield it
+        }
+      }
+      if (!r.data.has_more) break
+      const nx = Number(r.data.cursor ?? 0)
+      if (!Number.isFinite(nx) || nx === cursor) break
+      cursor = nx
+      await sleep(opts.pageDelayMs ?? 800)
+    }
+  }
+}
+
+export async function listUserMixes(
+  opts: FetcherOpts
+): Promise<Array<{ mixId: string; raw: Record<string, unknown> }>> {
+  const mixes: Array<{ mixId: string; raw: Record<string, unknown> }> = []
+  let cursor = '0'
+  for (let safety = 0; safety < 100; safety++) {
+    const r = await fetchUserMixList(opts.localUserId, opts.account, {
+      sec_user_id: opts.account.secUid,
+      cursor,
+      count: PAGE_SIZE,
+      list_scene: 1
+    })
+    if (!r.data) break
+    for (const mix of r.data.mix_infos ?? []) {
+      const mixId = String(mix.mix_id ?? '')
+      if (mixId) mixes.push({ mixId, raw: mix as Record<string, unknown> })
+    }
+    if (!r.data.has_more) break
+    const next = String(r.data.cursor ?? '')
+    if (!next || next === cursor) break
+    cursor = next
+    await sleep(opts.pageDelayMs ?? 800)
+  }
+  return mixes
+}
+
+export async function listCollectedMixes(
+  opts: FetcherOpts
+): Promise<Array<{ mixId: string; raw: Record<string, unknown> }>> {
+  const mixes: Array<{ mixId: string; raw: Record<string, unknown> }> = []
+  let cursor = '0'
+  for (let safety = 0; safety < 100; safety++) {
+    const r = await fetchUserCollectMix(opts.localUserId, opts.account, {
+      cursor,
+      count: PAGE_SIZE
+    })
+    if (!r.data) break
+    for (const mix of r.data.mix_infos ?? []) {
+      const mixId = String(mix.mix_id ?? '')
+      if (mixId) mixes.push({ mixId, raw: mix as Record<string, unknown> })
+    }
+    if (!r.data.has_more) break
+    const next = String(r.data.cursor ?? '')
+    if (!next || next === cursor) break
+    cursor = next
+    await sleep(opts.pageDelayMs ?? 800)
+  }
+  return mixes
+}
+
+export async function* paginateUserSelfMixVideos(opts: FetcherOpts): AsyncGenerator<AwemeListItem> {
+  const mixes = await listUserMixes(opts)
+  yield* paginateMixVideos(opts, mixes)
+}
+
+export async function* paginateUserCollectMixVideos(opts: FetcherOpts): AsyncGenerator<AwemeListItem> {
+  const mixes = await listCollectedMixes(opts)
+  yield* paginateMixVideos(opts, mixes)
 }

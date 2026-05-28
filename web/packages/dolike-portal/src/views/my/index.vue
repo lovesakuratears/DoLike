@@ -8,7 +8,7 @@ import MusicShelf from './components/MusicShelf.vue'
 import LocalPlayer from './components/LocalPlayer.vue'
 import AccountsPanel from './components/AccountsPanel.vue'
 import FolderGrid from './components/FolderGrid.vue'
-import { localApi, type VideoListItem, type FolderListItem, type MixListItem } from '@/api/local'
+import { localApi, type VideoListItem, type FolderListItem, type MixListItem, type DouyinAccountDTO } from '@/api/local'
 
 const route = useRoute()
 const router = useRouter()
@@ -60,6 +60,12 @@ const mixes = ref<MixListItem[]>([])
 const mixesLoading = ref(false)
 const activeMix = ref<MixListItem | null>(null)
 
+// ★ 页面级归档状态
+// 标记: PAGE_ARCHIVE_BUTTON
+const accounts = ref<DouyinAccountDTO[]>([])
+const pageArchiving = ref(false)
+const archiveMode = ref<'full' | 'incremental' | null>(null)
+
 const onPlay = (item: VideoListItem) => {
   router.push({ name: 'local-video', params: { id: String(item.id) } })
 }
@@ -76,6 +82,7 @@ const onBound = () => {
   accountsRef.value?.refresh()
   videoGridRef.value?.refresh()
   folderGridRef.value?.refresh()
+  void loadAccounts()
 }
 
 const openFolder = (folder: FolderListItem) => {
@@ -116,6 +123,7 @@ const refreshMixes = async () => {
 onMounted(() => {
   window.addEventListener('dolike:account-bound', onBound)
   if (activeTab.value === 'mixes') void refreshMixes()
+  void loadAccounts()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('dolike:account-bound', onBound)
@@ -126,6 +134,55 @@ watch(queryTab, (next) => {
   if (next === 'mixes') void refreshMixes()
 })
 
+// ★ 加载账号列表（用于页面级归档按钮）
+// 标记: PAGE_ARCHIVE_LOAD_ACCOUNTS
+const loadAccounts = async () => {
+  try {
+    const r = await localApi.douyinAccounts()
+    if (r.code === 0) {
+      accounts.value = r.data.filter(a => !a.secUid.startsWith('pending-'))
+      if (accounts.value.length > 0) {
+        const modeRes = await localApi.archiveMode(accounts.value[0].id)
+        if (modeRes.code === 0) {
+          archiveMode.value = modeRes.data.mode
+        }
+      }
+    }
+  } catch { /* 静默 */ }
+}
+
+// ★ 页面级一键归档 —— 对所有有效账号执行
+// 标记: PAGE_ARCHIVE_TRIGGER
+const pageSmartArchive = async () => {
+  if (pageArchiving.value) return
+  const validAccounts = accounts.value.filter(a => !a.secUid.startsWith('pending-'))
+  if (validAccounts.length === 0) {
+    ElMessage.warning('没有可用的抖音账号，请先绑定')
+    return
+  }
+  pageArchiving.value = true
+  try {
+    let successCount = 0
+    for (const acc of validAccounts) {
+      try {
+        const modeRes = await localApi.archiveMode(acc.id)
+        const mode = modeRes.code === 0 ? modeRes.data.mode : 'incremental'
+        const apiFn = mode === 'full' ? localApi.archiveFull : localApi.archiveIncremental
+        const r = await apiFn(acc.id)
+        if (r.code === 0) successCount++
+      } catch { /* 单个账号失败继续 */ }
+    }
+    if (successCount > 0) {
+      ElMessage.success(`已启动 ${successCount} 个账号的归档`)
+    } else {
+      ElMessage.error('所有账号归档启动失败')
+    }
+    await loadAccounts()
+  } finally {
+    pageArchiving.value = false
+  }
+}
+
 document.title = '都喜欢-DoLike'
 </script>
 
@@ -133,6 +190,16 @@ document.title = '都喜欢-DoLike'
   <div class="my-page">
     <header class="my-header">
       <h1>抖喜欢，我都喜欢</h1>
+      <button
+        v-if="accounts.length > 0"
+        class="page-archive-btn"
+        :class="{ 'full-mode': archiveMode === 'full' }"
+        :disabled="pageArchiving"
+        @click="pageSmartArchive"
+      >
+        <span v-if="pageArchiving">归档中…</span>
+        <span v-else>{{ archiveMode === 'full' ? '全量归档' : '增量归档' }}</span>
+      </button>
     </header>
 
     <section class="accounts-section">
@@ -644,6 +711,36 @@ document.title = '都喜欢-DoLike'
     border: 1px dashed var(--color-line-l3, #eee);
     border-radius: 22px;
     background: rgba(var(--white), 0.84);
+  }
+
+  .page-archive-btn {
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--primary-500), 0.3);
+    background: rgba(var(--primary-500), 0.08);
+    color: var(--color-primary, #1664ff);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+
+    &:hover {
+      background: rgba(var(--primary-500), 0.14);
+      border-color: rgba(var(--primary-500), 0.5);
+    }
+
+    &:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    &.full-mode {
+      border-color: rgba(var(--orange-red-500), 0.3);
+      background: rgba(var(--orange-red-500), 0.08);
+      color: rgba(var(--orange-red-700), 1);
+      &:hover {
+        background: rgba(var(--orange-red-500), 0.14);
+        border-color: rgba(var(--orange-red-500), 0.5);
+      }
+    }
   }
 
   @media (max-width: 1239px) {

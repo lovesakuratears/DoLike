@@ -1,23 +1,25 @@
-// Library —— 离线视频查询
+// Library —— 离线内容查询
 //
 // M2 范围：
-//   listVideos({localUserId, linkKind?, length?, q?, sort?, page, size})
+//   listVideos({localUserId, contentKind?, linkKind?, length?, q?, sort?, page, size})
 //   getContent(localUserId, id)
 //
 // 设计：
 //   - 始终按 localUserId 过滤 → DouyinAccount → Content 链
 //   - linkKind 走 ContentLink 子查询
 //   - shortVideoSec 从 UserSetting 读，默认 60
-//   - q 用简单 LIKE %q%（M3 再上 FTS5）
+//   - q 走 SQLite FTS5（title / desc / authorName）
 
 import { getPrisma } from '../core/db.js'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { loadConfig } from '../config.js'
 import { getLogger } from '../core/logger.js'
+import type { ContentKind } from '../archive/types.js'
 
 export interface ListVideosParams {
   localUserId: number
+  contentKind?: ContentKind | 'all'
   linkKind?: 'POST' | 'LIKE' | 'FAVORITE' | 'WATCH_LATER' | 'all'
   length?: 'long' | 'short' | 'all'
   q?: string
@@ -50,6 +52,24 @@ export interface FolderListItem {
   coverPath: string | null
 }
 
+export interface MixListItem {
+  id: number
+  mixId: string
+  kind: string
+  name: string
+  authorName: string
+  itemCount: number
+  publishAt: string | null
+  archivedAt: string
+  coverPath: string | null
+  douyinAccountId: number
+}
+
+export interface MixDetailResult {
+  mix: MixListItem
+  videos: ListVideosResult
+}
+
 export interface ListVideosResult {
   total: number
   page: number
@@ -61,6 +81,46 @@ async function shortVideoThreshold(localUserId: number): Promise<number> {
   const prisma = getPrisma()
   const s = await prisma.userSetting.findUnique({ where: { userId: localUserId } })
   return s?.shortVideoSec ?? 60
+}
+
+function mapContentRow(r: {
+  id: number
+  awemeId: string
+  title: string
+  authorName: string
+  durationSec: number
+  publishAt: Date
+  archivedAt: Date
+  coverPath: string | null
+  mediaPath: string | null
+  status: string
+  douyinAccountId: number
+  links: Array<{ linkKind: string }>
+}): VideoListItem {
+  return {
+    id: r.id,
+    awemeId: r.awemeId,
+    title: r.title,
+    authorName: r.authorName,
+    durationSec: r.durationSec,
+    publishAt: r.publishAt.toISOString(),
+    archivedAt: r.archivedAt.toISOString(),
+    coverPath: r.coverPath,
+    mediaPath: r.mediaPath,
+    status: r.status,
+    douyinAccountId: r.douyinAccountId,
+    linkKinds: Array.from(new Set(r.links.map((l) => l.linkKind)))
+  }
+}
+
+function buildFtsQuery(raw: string): string {
+  const tokens = raw
+    .trim()
+    .split(/\s+/)
+    .map((token) => token.replace(/["*]/g, '').trim())
+    .filter(Boolean)
+  if (tokens.length === 0) return ''
+  return tokens.map((token) => `"${token}"*`).join(' AND ')
 }
 
 export async function listVideos(params: ListVideosParams): Promise<ListVideosResult> {
@@ -82,9 +142,10 @@ export async function listVideos(params: ListVideosParams): Promise<ListVideosRe
   }
 
   // 构造 where
+  const contentKind = params.contentKind && params.contentKind !== 'all' ? params.contentKind : 'VIDEO'
   const linkKind = params.linkKind && params.linkKind !== 'all' ? params.linkKind : undefined
   const where: any = {
-    kind: 'VIDEO',
+    kind: contentKind,
     douyinAccountId: { in: accountIds },
     hidden: false
   }
@@ -93,14 +154,20 @@ export async function listVideos(params: ListVideosParams): Promise<ListVideosRe
   }
   if (params.length === 'long') where.durationSec = { gte: threshold }
   if (params.length === 'short') where.durationSec = { lt: threshold }
-  if (params.q) {
-    const like = `%${params.q.replace(/[%_]/g, m => '\\' + m)}%`
-    where.OR = [
-      { title: { contains: params.q } },
-      { desc: { contains: params.q } },
-      { authorName: { contains: params.q } }
-    ]
-    void like
+  if (params.q?.trim()) {
+    const ftsQuery = buildFtsQuery(params.q)
+    if (ftsQuery) {
+      const rows = await prisma.$queryRaw<Array<{ rowid: number }>>`
+        SELECT rowid
+        FROM content_search
+        WHERE content_search MATCH ${ftsQuery}
+      `
+      const ids = rows.map((row) => row.rowid)
+      if (ids.length === 0) {
+        return { total: 0, page, size, items: [] }
+      }
+      where.id = { in: ids }
+    }
   }
 
   // 排序
@@ -123,33 +190,7 @@ export async function listVideos(params: ListVideosParams): Promise<ListVideosRe
     total,
     page,
     size,
-      items: rows.map((r: {
-        id: number
-        awemeId: string
-        title: string
-        authorName: string
-        durationSec: number
-        publishAt: Date
-        archivedAt: Date
-        coverPath: string | null
-        mediaPath: string | null
-        status: string
-        douyinAccountId: number
-        links: Array<{ linkKind: string }>
-      }) => ({
-      id: r.id,
-      awemeId: r.awemeId,
-      title: r.title,
-      authorName: r.authorName,
-      durationSec: r.durationSec,
-      publishAt: r.publishAt.toISOString(),
-      archivedAt: r.archivedAt.toISOString(),
-      coverPath: r.coverPath,
-      mediaPath: r.mediaPath,
-      status: r.status,
-      douyinAccountId: r.douyinAccountId,
-      linkKinds: Array.from(new Set(r.links.map((l: { linkKind: string }) => l.linkKind)))
-    }))
+    items: rows.map(mapContentRow)
   }
 }
 
@@ -160,20 +201,7 @@ export async function getContent(localUserId: number, id: number): Promise<Video
     include: { links: { select: { linkKind: true } } }
   })
   if (!r) return null
-  return {
-    id: r.id,
-    awemeId: r.awemeId,
-    title: r.title,
-    authorName: r.authorName,
-    durationSec: r.durationSec,
-    publishAt: r.publishAt.toISOString(),
-    archivedAt: r.archivedAt.toISOString(),
-    coverPath: r.coverPath,
-    mediaPath: r.mediaPath,
-    status: r.status,
-    douyinAccountId: r.douyinAccountId,
-    linkKinds: Array.from(new Set(r.links.map((l: { linkKind: string }) => l.linkKind)))
-  }
+  return mapContentRow(r)
 }
 
 export async function listFolders(localUserId: number): Promise<FolderListItem[]> {
@@ -215,6 +243,101 @@ export async function createFolder(localUserId: number, name: string): Promise<F
     itemCount: row._count.items,
     updatedAt: row.updatedAt.toISOString(),
     coverPath: null
+  }
+}
+
+export async function listMixes(localUserId: number, accountId?: number): Promise<MixListItem[]> {
+  const prisma = getPrisma()
+  const rows = await prisma.mix.findMany({
+    where: {
+      douyinAccount: {
+        localUserId,
+        ...(accountId ? { id: accountId } : {})
+      }
+    },
+    orderBy: [
+      { archivedAt: 'desc' },
+      { id: 'desc' }
+    ]
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    mixId: row.mixId,
+    kind: row.kind,
+    name: row.name,
+    authorName: row.authorName,
+    itemCount: row.itemCount,
+    publishAt: row.publishAt ? row.publishAt.toISOString() : null,
+    archivedAt: row.archivedAt.toISOString(),
+    coverPath: row.coverPath,
+    douyinAccountId: row.douyinAccountId
+  }))
+}
+
+export async function listMixVideos(
+  localUserId: number,
+  mixDbId: number,
+  page = 1,
+  size = 20
+): Promise<MixDetailResult | null> {
+  const prisma = getPrisma()
+  const safePage = Math.max(1, page)
+  const safeSize = Math.min(100, Math.max(1, size))
+  const skip = (safePage - 1) * safeSize
+
+  const mix = await prisma.mix.findFirst({
+    where: {
+      id: mixDbId,
+      douyinAccount: { localUserId }
+    }
+  })
+  if (!mix) return null
+
+  const where = {
+    hidden: false,
+    kind: 'VIDEO',
+    douyinAccountId: mix.douyinAccountId,
+    links: {
+      some: {
+        mixId: mix.mixId
+      }
+    }
+  } as const
+
+  const [total, rows] = await Promise.all([
+    prisma.content.count({ where }),
+    prisma.content.findMany({
+      where,
+      orderBy: { publishAt: 'desc' },
+      skip,
+      take: safeSize,
+      include: { links: { select: { linkKind: true } } }
+    })
+  ])
+
+  const fallbackCover = rows.find((row) => row.coverPath)?.coverPath ?? null
+  const mixItem: MixListItem = {
+    id: mix.id,
+    mixId: mix.mixId,
+    kind: mix.kind,
+    name: mix.name,
+    authorName: mix.authorName,
+    itemCount: mix.itemCount,
+    publishAt: mix.publishAt ? mix.publishAt.toISOString() : null,
+    archivedAt: mix.archivedAt.toISOString(),
+    coverPath: mix.coverPath ?? fallbackCover,
+    douyinAccountId: mix.douyinAccountId
+  }
+
+  return {
+    mix: mixItem,
+    videos: {
+      total,
+      page: safePage,
+      size: safeSize,
+      items: rows.map(mapContentRow)
+    }
   }
 }
 

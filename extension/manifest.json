@@ -20,7 +20,13 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "scripting", "activeTab"],
+  "permissions": [
+    "storage",
+    "scripting",
+    "activeTab",
+    "cookies",
+    "webRequest"
+  ],
   "host_permissions": [
     "*://*.douyin.com/*",
     "http://127.0.0.1/*",
@@ -32,15 +38,23 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.douyin.com/*"],
-      "js": ["content-script.js"],
+      "matches": [
+        "https://www.douyin.com/*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["lib/*.js"],
-      "matches": ["https://www.douyin.com/*"]
+      "resources": [
+        "lib/*.js"
+      ],
+      "matches": [
+        "https://www.douyin.com/*"
+      ]
     }
   ]
 }

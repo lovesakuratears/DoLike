@@ -11,6 +11,8 @@ import { fail, ok, AppError, ERR } from '../core/errors.js'
 import {
   getContent,
   listVideos,
+  listMixes,
+  listMixVideos,
   hideContents,
   listFolders,
   createFolder,
@@ -21,11 +23,13 @@ import {
   removeFolderItems
 } from './library.service.js'
 
+const contentKindEnum = z.enum(['VIDEO', 'MUSIC', 'MIX_VIDEO', 'all'])
 const linkKindEnum = z.enum(['POST', 'LIKE', 'FAVORITE', 'WATCH_LATER', 'all'])
 const lengthEnum = z.enum(['long', 'short', 'all'])
 const sortEnum = z.enum(['publish', 'archived', 'duration'])
 
 const listQuery = z.object({
+  contentKind: contentKindEnum.optional(),
   linkKind: linkKindEnum.optional(),
   length: lengthEnum.optional(),
   q: z.string().optional(),
@@ -60,6 +64,8 @@ const folderVideosQuery = z.object({
   size: z.coerce.number().int().positive().max(100).optional()
 })
 
+const mixParam = z.object({ mixId: z.coerce.number().int().positive() })
+
 export default async function libraryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/library/videos', async (req, reply) => {
     try {
@@ -67,6 +73,7 @@ export default async function libraryRoutes(app: FastifyInstance): Promise<void>
       const q = listQuery.parse(req.query)
       const res = await listVideos({
         localUserId: user.id,
+        contentKind: q.contentKind,
         linkKind: q.linkKind,
         length: q.length,
         q: q.q,
@@ -81,6 +88,41 @@ export default async function libraryRoutes(app: FastifyInstance): Promise<void>
         return reply
           .status(400)
           .send(fail(ERR.VALIDATION_FAILED, e.errors[0]?.message ?? '参数错误'))
+      }
+      if (e instanceof AppError) return reply.status(e.httpStatus).send(fail(e.code, e.message))
+      throw e
+    }
+  })
+
+  app.get('/api/library/mixes', async (req, reply) => {
+    try {
+      const user = requireAuth(req, reply)
+      const q = z.object({
+        accountId: z.coerce.number().int().positive().optional()
+      }).parse(req.query)
+      return ok(await listMixes(user.id, q.accountId))
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        return reply
+          .status(400)
+          .send(fail(ERR.VALIDATION_FAILED, e.errors[0]?.message ?? '参数错误'))
+      }
+      if (e instanceof AppError) return reply.status(e.httpStatus).send(fail(e.code, e.message))
+      throw e
+    }
+  })
+
+  app.get('/api/library/mixes/:mixId/videos', async (req, reply) => {
+    try {
+      const user = requireAuth(req, reply)
+      const { mixId } = mixParam.parse(req.params)
+      const q = folderVideosQuery.parse(req.query)
+      const detail = await listMixVideos(user.id, mixId, q.page, q.size)
+      if (!detail) return reply.status(404).send(fail(ERR.NOT_FOUND, '合集不存在'))
+      return ok(detail)
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        return reply.status(400).send(fail(ERR.VALIDATION_FAILED, e.errors[0]?.message ?? '参数错误'))
       }
       if (e instanceof AppError) return reply.status(e.httpStatus).send(fail(e.code, e.message))
       throw e

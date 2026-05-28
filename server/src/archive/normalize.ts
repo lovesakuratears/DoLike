@@ -30,10 +30,18 @@ export interface RawAwemeLike {
     bit_rate?: Array<{ play_addr?: { url_list?: string[]; uri?: string }; bit_rate?: number; gear_name?: string }>
   }
   music?: {
+    id?: number | string
+    id_str?: string
     play_url?: { url_list?: string[]; uri?: string }
     duration?: number
     title?: string
     author?: string
+    cover_hd?: { url_list?: string[] }
+    cover_large?: { url_list?: string[] }
+    cover_medium?: { url_list?: string[] }
+    cover_thumb?: { url_list?: string[] }
+    owner_nickname?: string
+    sec_uid?: string
   }
   [key: string]: unknown
 }
@@ -57,6 +65,23 @@ export interface LinkInput {
   linkKind: LinkKind
   folderId?: string | null
   mixId?: string | null
+}
+
+export interface RawCollectedMusicLike {
+  id?: number | string
+  id_str?: string
+  title?: string
+  author?: string | { nickname?: string }
+  duration?: number
+  play_url?: { url_list?: string[]; uri?: string }
+  cover_hd?: { url_list?: string[] }
+  cover_large?: { url_list?: string[] }
+  cover_medium?: { url_list?: string[] }
+  cover_thumb?: { url_list?: string[] }
+  owner_nickname?: string
+  sec_uid?: string
+  create_time?: number | string
+  [key: string]: unknown
 }
 
 function firstUrl(...lists: Array<string[] | undefined>): string | null {
@@ -143,6 +168,38 @@ export function normalizeVideoAweme(item: RawAwemeLike): ContentInput {
     publishAt,
     mediaUrl,
     mediaUrlExpiredAt,
+    coverUrl,
+    rawMeta: JSON.stringify(item)
+  }
+}
+
+export function normalizeMusicItem(item: RawCollectedMusicLike): ContentInput {
+  const awemeId = String(item.id_str ?? item.id ?? '')
+  const durationMs = typeof item.duration === 'number' ? item.duration : 0
+  const mediaUrl = firstUrl(item.play_url?.url_list) ?? buildUriPlayUrl(item.play_url?.uri)
+  const coverUrl = firstUrl(
+    item.cover_hd?.url_list,
+    item.cover_large?.url_list,
+    item.cover_medium?.url_list,
+    item.cover_thumb?.url_list
+  )
+
+  const authorName =
+    item.owner_nickname ??
+    (typeof item.author === 'string' ? item.author : item.author?.nickname) ??
+    ''
+
+  return {
+    awemeId,
+    kind: 'MUSIC',
+    title: safeTitle(item.title, awemeId || 'untitled'),
+    desc: typeof item.author === 'string' ? item.author : item.author?.nickname ?? null,
+    authorSecUid: item.sec_uid ?? '',
+    authorName,
+    durationSec: Math.max(0, Math.round(durationMs / 1000)),
+    publishAt: parseCreateTime(item.create_time),
+    mediaUrl,
+    mediaUrlExpiredAt: new Date(Date.now() + 5 * 60 * 60 * 1000),
     coverUrl,
     rawMeta: JSON.stringify(item)
   }

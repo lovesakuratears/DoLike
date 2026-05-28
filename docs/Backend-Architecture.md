@@ -2,7 +2,7 @@
 
 > 版本：v0.1（初稿，配套 `PRD.md` v0.1）
 > 范围：本文档仅讨论后端 + 浏览器插件 + 桌面启动壳，前端仅给出"调整指南"
-> 仓库目录约定：在 `DoLike/` 下新增 `server/`（Node 后端）、`extension/`（Chrome 插件）；前端继续用 `web/packages/douyin-portal`
+> 仓库目录约定：在 `DoLike/` 下新增 `server/`（Node 后端）、`extension/`（Chrome 插件）；前端继续用 `web/packages/dolike-portal`
 
 ---
 
@@ -13,7 +13,7 @@
 │                        Local Machine (127.0.0.1)                         │
 │                                                                          │
 │  ┌─────────────────┐    HTTP/WS    ┌──────────────────────────────────┐  │
-│  │  douyin-portal  │ ─────────────▶│  Local Backend  (Node + Fastify) │  │
+│  │  dolike-portal  │ ─────────────▶│  Local Backend  (Node + Fastify) │  │
 │  │  (Vue 3)        │ ◀───────────  │  :7777                            │  │
 │  └─────────────────┘    SSE         │                                  │  │
 │                                     │  ┌──────────────────────────┐    │  │
@@ -45,7 +45,7 @@
 3 个独立可部署单元：
 - **server/** — Node.js 本地后端（核心）
 - **extension/** — Chrome MV3 桥接插件（方案 C）
-- **web/packages/douyin-portal** — 现有 Vue 前端，做减法调整
+- **web/packages/dolike-portal** — 现有 Vue 前端，做减法调整
 
 ---
 
@@ -552,7 +552,7 @@ cd extension && pnpm build
 
 ---
 
-## 13. 与现有前端 (`douyin-portal`) 的衔接（详见任务 #3 调整文档）
+## 13. 与现有前端 (`dolike-portal`) 的衔接（详见任务 #3 调整文档）
 
 后端的 API 设计已经按"前端做减法"思路定型。前端需要做的最小调整：
 

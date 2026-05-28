@@ -10,3 +10,7 @@ server/dist/
 server/node_modules/
 douyin-web/node_modules/
 douyin-web/packages/douyin-portal/dist/
+.pnpm-store/
+server/prisma.dev.db
+web/packages/dolike-admin/
+web/packages/dolike-creator/

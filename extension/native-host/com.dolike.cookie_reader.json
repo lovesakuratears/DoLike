@@ -1,0 +1,9 @@
+{
+  "name": "com.dolike.cookie_reader",
+  "description": "DoLike Cookie Reader — reads Chrome cookies from SQLite database",
+  "path": "NATIVE_HOST_PATH_PLACEHOLDER",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://*/"
+  ]
+}

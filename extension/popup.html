@@ -18,7 +18,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      width: 360px;
+      width: 380px;
       min-height: 520px;
       padding: 16px;
       color: var(--ink);
@@ -34,169 +34,109 @@
       box-shadow: 0 12px 30px rgba(55, 46, 30, 0.08);
       padding: 14px;
     }
-    h1 {
-      margin: 0;
-      font-size: 16px;
-      line-height: 1.2;
-    }
-    p {
-      margin: 0;
-    }
-    .lead {
-      margin-top: 8px;
-      font-size: 12px;
-      line-height: 1.6;
-      color: var(--muted);
-    }
-    .section {
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px dashed var(--line);
-    }
-    .section-title {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-    .section-title strong {
-      font-size: 12px;
-      letter-spacing: .03em;
-    }
-    .lamp {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      color: var(--muted);
-    }
-    .lamp-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      background: #bbb2a4;
-      box-shadow: 0 0 0 3px rgba(187, 178, 164, 0.18);
-    }
-    .lamp.ok .lamp-dot {
-      background: var(--ok);
-      box-shadow: 0 0 0 3px rgba(31, 143, 83, 0.18);
-    }
-    .lamp.err .lamp-dot {
-      background: var(--err);
-      box-shadow: 0 0 0 3px rgba(196, 61, 61, 0.16);
-    }
-    label {
-      display: block;
-      font-size: 12px;
-      margin: 10px 0 6px;
-      color: #544c40;
-    }
+    h1 { margin: 0; font-size: 16px; line-height: 1.2; }
+    p { margin: 0; }
+    .lead { margin-top: 8px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+    .section { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+    .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .section-title strong { font-size: 12px; letter-spacing: .03em; }
+    .lamp { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+    .lamp-dot { width: 10px; height: 10px; border-radius: 999px; background: #bbb2a4; box-shadow: 0 0 0 3px rgba(187, 178, 164, 0.18); }
+    .lamp.ok .lamp-dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(31, 143, 83, 0.18); }
+    .lamp.err .lamp-dot { background: var(--err); box-shadow: 0 0 0 3px rgba(196, 61, 61, 0.16); }
+    label { display: block; font-size: 12px; margin: 10px 0 6px; color: #544c40; }
     input {
-      width: 100%;
-      padding: 9px 10px;
-      font-size: 12px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: #fff;
-      color: var(--ink);
-      outline: none;
+      width: 100%; padding: 9px 10px; font-size: 12px;
+      border: 1px solid var(--line); border-radius: 10px;
+      background: #fff; color: var(--ink); outline: none;
     }
-    input:focus {
-      border-color: #9a8661;
-      box-shadow: 0 0 0 3px rgba(154, 134, 97, 0.12);
-    }
-    .row {
-      display: flex;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    button {
-      appearance: none;
-      border: 1px solid #cbc0ad;
-      background: #fff;
-      color: var(--ink);
-      border-radius: 10px;
-      padding: 8px 10px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: .15s ease;
-      flex: 1;
-    }
-    button:hover { transform: translateY(-1px); }
-    button.primary {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
-    }
-    button.ghost {
-      background: #f8f4ec;
-    }
-    .status-box {
-      margin-top: 10px;
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: #f5f1e8;
-      font-size: 12px;
-      line-height: 1.6;
-      color: #534b3f;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .status-box.ok {
-      background: rgba(31, 143, 83, 0.10);
-      color: #13683c;
-    }
-    .status-box.err {
-      background: rgba(196, 61, 61, 0.10);
-      color: #9f2f2f;
-    }
-    .mono {
+    input:focus { border-color: #9a8661; box-shadow: 0 0 0 3px rgba(154, 134, 97, 0.12); }
+    textarea {
+      width: 100%; padding: 9px 10px; font-size: 11px;
+      border: 1px solid var(--line); border-radius: 10px;
+      background: #fff; color: var(--ink); outline: none;
+      resize: vertical; min-height: 50px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
+    textarea:focus { border-color: #9a8661; box-shadow: 0 0 0 3px rgba(154, 134, 97, 0.12); }
+    .row { display: flex; gap: 8px; margin-top: 10px; }
+    button {
+      appearance: none; border: 1px solid #cbc0ad; background: #fff;
+      color: var(--ink); border-radius: 10px; padding: 8px 10px;
+      font-size: 12px; cursor: pointer; transition: .15s ease; flex: 1;
+    }
+    button:hover { transform: translateY(-1px); }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.ghost { background: #f8f4ec; }
+    .status-box {
+      margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+      background: #f5f1e8; font-size: 12px; line-height: 1.6;
+      color: #534b3f; white-space: pre-wrap; word-break: break-word;
+    }
+    .status-box.ok { background: rgba(31, 143, 83, 0.10); color: #13683c; }
+    .status-box.err { background: rgba(196, 61, 61, 0.10); color: #9f2f2f; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     .log-list {
-      margin: 0;
-      padding: 0;
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      max-height: 180px;
-      overflow: auto;
+      margin: 0; padding: 0; list-style: none;
+      display: flex; flex-direction: column; gap: 8px;
+      max-height: 180px; overflow: auto;
     }
     .log-item {
-      padding: 8px 10px;
-      border-radius: 10px;
-      background: #f7f3eb;
-      border: 1px solid rgba(130, 110, 78, 0.08);
+      padding: 8px 10px; border-radius: 10px;
+      background: #f7f3eb; border: 1px solid rgba(130, 110, 78, 0.08);
     }
     .log-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 4px;
-      font-size: 11px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; margin-bottom: 4px; font-size: 11px;
     }
-    .tag {
-      display: inline-block;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: rgba(31, 29, 24, 0.08);
-    }
+    .tag { display: inline-block; padding: 1px 6px; border-radius: 999px; background: rgba(31, 29, 24, 0.08); }
     .tag.ok { background: rgba(31, 143, 83, 0.12); color: #14653c; }
     .tag.err { background: rgba(196, 61, 61, 0.12); color: #9b2f2f; }
-    .hint {
-      margin-top: 8px;
-      font-size: 11px;
-      color: var(--muted);
-      line-height: 1.6;
+    .hint { margin-top: 8px; font-size: 11px; color: var(--muted); line-height: 1.6; }
+
+    /* ── Cookie 采集区 ── */
+    .cookie-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 999px; font-size: 11px;
+      background: #e8f5e9; color: #2e7d32; cursor: pointer;
     }
+    .cookie-badge .arrow { font-size: 9px; transition: transform .2s; }
+    .cookie-badge.open .arrow { transform: rotate(180deg); }
+    .cookie-result {
+      margin-top: 6px; padding: 8px 10px; border-radius: 10px;
+      background: #f0ede5; font-size: 11px; line-height: 1.5;
+      max-height: 120px; overflow: auto;
+    }
+    .cookie-result .cookie-item {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px; padding: 1px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.04); word-break: break-all;
+    }
+    .cookie-result .cookie-item .name { color: #13683c; }
+
+    /* ── 高级折叠区 ── */
+    .advanced-toggle {
+      cursor: pointer; font-size: 11px; color: var(--muted);
+      display: flex; align-items: center; gap: 4px; margin-top: 8px;
+    }
+    .advanced-toggle:hover { color: var(--ink); }
+    .advanced-content {
+      display: none; margin-top: 8px; padding-top: 8px;
+      border-top: 1px dashed var(--line);
+    }
+    .advanced-content.show { display: block; }
+    .method-btn {
+      font-size: 11px; padding: 5px 8px; border-radius: 8px;
+      border: 1px solid var(--line); background: #f8f4ec;
+      color: var(--ink); cursor: pointer; flex: 1;
+    }
+    .method-btn:hover { background: #efe9db; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>DoLike 插件绑定</h1>
-    <p class="lead">先在 DoLike 页面里生成 API Key。这个弹窗只负责配置项目 URL、API Key，并测试插件是否已经和本地项目握手成功。</p>
+    <p class="lead">先在 DoLike 页面里生成 API Key。这个弹窗负责配置项目 URL、API Key，并测试插件是否和本地项目握手成功。</p>
 
     <div class="section">
       <div class="section-title">
@@ -210,13 +150,26 @@
       <label for="pushToken">API Key</label>
       <input id="pushToken" type="password" placeholder="pt_xxxxxxx" />
 
+      <label for="cookie">Cookie（可选，用于音乐下载签名）</label>
+      <textarea id="cookie" placeholder="手动粘贴，或点击「绑定插件」自动从浏览器采集"></textarea>
+
+      <!-- Cookie 采集状态行 -->
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+        <span id="cookieBadge" class="cookie-badge" style="display:none">
+          🔑 M1 chrome.cookies · <span id="cookieCount">0</span> 个
+          <span class="arrow">▼</span>
+        </span>
+        <span id="cookieStatusHint" class="hint" style="margin-top:0">点击「绑定插件」自动采集 Cookie</span>
+      </div>
+      <div id="cookieResult" class="cookie-result" style="display:none"></div>
+      <p class="hint">「绑定插件」会自动用 chrome.cookies API 采集 douyin.com Cookie 并附带推送。</p>
+
       <div class="row">
         <button id="save" class="primary">保存配置</button>
         <button id="handshake" class="ghost">测试握手</button>
       </div>
 
       <div id="status" class="status-box">准备就绪。</div>
-      <p class="hint">绿色表示 URL 可达且 API Key 在当前项目内有效。红色表示 URL、端口、登录态或 API Key 有问题。</p>
     </div>
 
     <div class="section">
@@ -225,7 +178,7 @@
         <button id="clearLogs" class="ghost" style="flex:0 0 auto;padding:6px 10px;">清空日志</button>
       </div>
       <div class="row">
-        <button data-act="init">绑定插件</button>
+        <button data-act="init" class="primary">绑定插件</button>
         <button data-act="ping-page">检查抖音页</button>
       </div>
       <div class="row">
@@ -240,6 +193,28 @@
         <button data-act="push-collect-folder">推送收藏夹视频</button>
         <button data-act="push-collect-music">推送收藏音乐</button>
       </div>
+    </div>
+
+    <!-- 折叠的高级 Cookie 采集方式 -->
+    <div class="advanced-toggle" id="advancedToggle">
+      <span class="arrow">▶</span> 高级 Cookie 采集方式（M2 webRequest / M3 CDP / M4 Native）
+    </div>
+    <div class="advanced-content" id="advancedContent">
+      <div class="row" style="margin-top:4px">
+        <button class="method-btn" data-cookie-method="2">M2 webRequest</button>
+        <button class="method-btn" data-cookie-method="3">M3 CDP</button>
+      </div>
+      <div class="row">
+        <button class="method-btn" data-cookie-method="4">M4 Native</button>
+        <button class="method-btn" id="cookieCollectAllAdvanced">全部尝试</button>
+      </div>
+      <div class="row">
+        <input id="cdpPort" type="number" placeholder="CDP 端口" value="9222" style="width:100px;flex:none" />
+      </div>
+      <p class="hint">
+        M2 需先访问抖音页面产生请求；M3 需 <code>--remote-debugging-port=9222</code>；M4 需安装本地客户端。<br/>
+        代码已保留，仅当前不使用。需要时展开此区域即可。
+      </p>
     </div>
 
     <div class="section">

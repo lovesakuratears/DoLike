@@ -1,7 +1,7 @@
 // 解析 / 序列化 Douyin web cookie 字符串
 // 输入示例： "sessionid=xxx; ttwid=yyy; msToken=zzz"
 
-const REQUIRED = ['sessionid'] as const
+const REQUIRED = ['sessionid', 'ttwid'] as const
 
 export interface ParsedCookies {
   map: Record<string, string>

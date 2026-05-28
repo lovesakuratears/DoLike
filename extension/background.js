@@ -4,20 +4,30 @@
 //   1) 接收 popup / content-script 的消息，调度 chrome.scripting 把 collectors.js
 //      注入到 douyin.com 页面的 MAIN world（让请求由页面发出，自动签名）
 //   2) 把采集到的 items 透传给 lib/push.js → POST /api/bridge/push
+//   3) 提供 Cookie 采集（M1 自动，M2/M3/M4 备用）
 //
 // 关键约束：service worker 没有 DOM，也无法直接做有签名的 douyin 请求。所有抓取
 // 必须经由 chrome.scripting.executeScript({world:'MAIN', ...}) 在抖音页面里跑。
 
 import { pushToBackend } from './lib/push.js'
+import { loadConfig, isTokenLikelyValid } from './lib/config.js'
+import {
+  collectCookiesMethod1,
+  collectCookiesMethod2,
+  collectCookiesMethod3,
+  collectCookiesMethod4,
+  collectAllCookies,
+  cookiesToString
+} from './lib/cookie-collectors.js'
 
 const DOUYIN_HOST_RE = /^https:\/\/www\.douyin\.com\//
+
+// ─── Tab 工具 ────────────────────────────────────────────────────────
 
 async function findDouyinTab() {
   const tabs = await chrome.tabs.query({ url: 'https://www.douyin.com/*' })
   if (tabs.length === 0) return null
-  // 优先取 active 且 highlighted 的
-  const active = tabs.find(t => t.active) || tabs[0]
-  return active
+  return tabs.find(t => t.active) || tabs[0]
 }
 
 async function ensureDouyinTab() {
@@ -33,18 +43,13 @@ async function ensureDouyinTab() {
 
 async function injectCollectors(tabId) {
   await chrome.scripting.executeScript({
-    target: { tabId },
-    world: 'MAIN',
-    files: ['lib/collectors.page.js']
+    target: { tabId }, world: 'MAIN', files: ['lib/collectors.page.js']
   })
 }
 
 async function runInPage(tabId, func, args = []) {
   const [{ result, error }] = await chrome.scripting.executeScript({
-    target: { tabId },
-    world: 'MAIN',
-    func,
-    args
+    target: { tabId }, world: 'MAIN', func, args
   })
   if (error) throw new Error(error.message || String(error))
   return result
@@ -69,15 +74,20 @@ async function callCollector(tabId, name, args) {
   return res.data
 }
 
+// ─── 原有业务：init / push ───────────────────────────────────────────
+
 async function actionInit() {
   const tab = await ensureDouyinTab()
   const profile = await callCollector(tab.id, 'collectSelfProfile', [])
-  const dto = await pushToBackend({
+  const initPayload = {
     type: 'init',
     secUid: profile.secUid,
     nickname: profile.nickname,
     avatarUrl: profile.avatarUrl || undefined
-  })
+  }
+  // 注意：不再传 cookie，因为 chrome.cookies API 拿不到 HttpOnly 的 sessionid
+  // Cookie 需要在 portal 页面手动粘贴
+  const dto = await pushToBackend(initPayload)
   return { profile, dto }
 }
 
@@ -105,13 +115,51 @@ async function actionPushList(linkKind) {
   if (!Array.isArray(items) || items.length === 0) {
     return { profile, pushed: 0, dto: null, empty: true }
   }
-  const dto = await pushToBackend({
-    type: 'increment',
-    linkKind,
-    items
-  })
+  const dto = await pushToBackend({ type: 'increment', linkKind, items })
   return { profile, pushed: items.length, dto }
 }
+
+async function handleSignedProxy(path, query) {
+  const { backendUrl, pushToken } = await loadConfig()
+  if (!isTokenLikelyValid(pushToken)) return { error: '未配置 API Key' }
+  const resp = await fetch(`${backendUrl}/api/bridge/proxy`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-push-token': pushToken },
+    body: JSON.stringify({ path, query })
+  })
+  const json = await resp.json()
+  if (json?.code === 0 && json?.data) return json.data.data
+  return { error: json?.message || `HTTP ${resp.status}`, status: resp.status }
+}
+
+// ─── Cookie 采集消息处理 ─────────────────────────────────────────────
+// 标记: COOKIE_COLLECT_HANDLER
+// M1 由 popup 在绑定插件时自动调用（COOKIE_AUTO_COLLECT_ON_INIT）
+// M2/M3/M4 通过高级折叠区手动触发（COOKIE_ADVANCED_METHODS）
+
+async function handleCollectCookies(msg) {
+  const { method, cdpPort } = msg
+
+  if (method === 'all') {
+    const methods = msg.includeNative ? [1, 2, 3, 4] : [1, 2, 3]
+    const { results, errors } = await collectAllCookies({
+      methods, cdpPort: cdpPort || 9222, domain: 'douyin.com'
+    })
+    return { results, errors }
+  }
+
+  let result
+  switch (method) {
+    case 1: result = await collectCookiesMethod1('douyin.com'); break
+    case 2: result = collectCookiesMethod2(); break
+    case 3: result = await collectCookiesMethod3(cdpPort || 9222); break
+    case 4: result = await collectCookiesMethod4(); break
+    default: throw new Error(`未知采集方法: ${method}`)
+  }
+  return { results: [result], errors: [] }
+}
+
+// ─── 消息路由 ────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   ;(async () => {
@@ -124,6 +172,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ ok: true, data: r })
       } else if (msg?.type === 'ping') {
         sendResponse({ ok: true, data: { ts: Date.now() } })
+      } else if (msg?.type === 'signedProxy') {
+        const data = await handleSignedProxy(msg.path, msg.query)
+        sendResponse(data)
+      } else if (msg?.type === 'collectCookies') {
+        // 标记: COOKIE_COLLECT_HANDLER_ENTRY
+        const data = await handleCollectCookies(msg)
+        sendResponse({ ok: true, data })
       } else {
         sendResponse({ ok: false, error: 'unknown message type' })
       }

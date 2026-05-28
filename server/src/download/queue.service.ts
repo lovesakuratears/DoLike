@@ -262,6 +262,31 @@ async function handleWorkerMessage(_w: Worker, m: WorkerOut): Promise<void> {
         where: { id: meta.contentId },
         data: { coverPath: rel }
       })
+      const content = await prisma.content.findUnique({
+        where: { id: meta.contentId },
+        select: {
+          douyinAccountId: true,
+          links: {
+            select: { mixId: true }
+          }
+        }
+      })
+      const mixIds = Array.from(new Set((content?.links ?? []).map((link) => link.mixId).filter(Boolean))) as string[]
+      if (content && mixIds.length > 0) {
+        await prisma.mix.updateMany({
+          where: {
+            douyinAccountId: content.douyinAccountId,
+            mixId: { in: mixIds },
+            coverPath: null
+          },
+          data: { coverPath: rel }
+        })
+      }
+    } else if (meta.kind === 'audio') {
+      await prisma.content.update({
+        where: { id: meta.contentId },
+        data: { mediaPath: rel, mediaSize: BigInt(m.size), status: 'done' }
+      })
     }
     broadcaster({
       type: 'download.done',
@@ -341,6 +366,7 @@ export interface EnqueueOpts {
   mixId: string | null
   awemeId: string
   publishAt: Date
+  mediaKind?: 'video' | 'audio'
   videoUrl: string | null
   coverUrl: string | null
 }
@@ -368,6 +394,7 @@ export async function enqueueDownloadsForContent(opts: EnqueueOpts): Promise<voi
   })
   const hasCoverTask = existed.some((t: { kind: string }) => t.kind === 'cover')
   const hasVideoTask = existed.some((t: { kind: string }) => t.kind === 'video')
+  const hasAudioTask = existed.some((t: { kind: string }) => t.kind === 'audio')
   const hasTerminalFailure = existed.some((t: { status: string }) => t.status === 'failed')
 
   if (opts.coverUrl) {
@@ -384,22 +411,37 @@ export async function enqueueDownloadsForContent(opts: EnqueueOpts): Promise<voi
     }
   }
   if (opts.videoUrl) {
-    const mode = getDownloadMode(opts.localUserId)
-    const resolved = await resolveVideoSource(opts.videoUrl, mode, opts.awemeId)
-    if (!hasVideoTask) {
-      await prisma.downloadTask.create({
-        data: {
-          contentId: opts.contentId,
-          kind: 'video',
-          url: resolved.url,
-          targetPath: awemeFile(dir, 'video')
-        }
-      })
-      log().info(
-        { contentId: opts.contentId, mode, resolvedBy: resolved.resolvedBy, strategy: resolved.strategy },
-        'video source resolved'
-      )
-      enqueued++
+    const mediaKind = opts.mediaKind ?? 'video'
+    if (mediaKind === 'audio') {
+      if (!hasAudioTask) {
+        await prisma.downloadTask.create({
+          data: {
+            contentId: opts.contentId,
+            kind: 'audio',
+            url: opts.videoUrl,
+            targetPath: awemeFile(dir, 'audio')
+          }
+        })
+        enqueued++
+      }
+    } else {
+      const mode = getDownloadMode(opts.localUserId)
+      const resolved = await resolveVideoSource(opts.videoUrl, mode, opts.awemeId)
+      if (!hasVideoTask) {
+        await prisma.downloadTask.create({
+          data: {
+            contentId: opts.contentId,
+            kind: 'video',
+            url: resolved.url,
+            targetPath: awemeFile(dir, 'video')
+          }
+        })
+        log().info(
+          { contentId: opts.contentId, mode, resolvedBy: resolved.resolvedBy, strategy: resolved.strategy },
+          'video source resolved'
+        )
+        enqueued++
+      }
     }
   } else {
     log().warn({ contentId: opts.contentId, awemeId: opts.awemeId, linkKind: opts.linkKind }, 'no videoUrl, skipping video task')

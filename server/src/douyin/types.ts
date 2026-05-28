@@ -12,6 +12,7 @@ export interface DouyinAccountDTO {
 }
 
 export interface ProfileSelfMin {
+  __cookieValidated?: boolean
   secUid: string
   nickname: string
   avatarUrl: string | null

@@ -6,11 +6,18 @@ if (window.bootstrapCollectorsLoaded) {
 
   ;(function bootstrapCollectors() {
     const globalApi = window.__DOLIKE__ || {}
+    console.log('[DoList] bootstrapCollectors: loaded, api keys:', Object.keys(globalApi))
     if (typeof globalApi.collectSelfProfile === 'function') return
 
     const ORIGIN = window.ORIGIN || 'https://www.douyin.com'
     const SEC_UID_RE = /\/user\/([A-Za-z0-9._-]{20,})/g
     const AWEME_ID_RE = /\/video\/(\d+)/g
+
+    // 提取页面 cookie 中的 msToken（音乐 API 必需）
+    function getMsToken() {
+      const match = document.cookie.match(/(?:^|;\s*)msToken=([^;]+)/)
+      return match ? match[1].trim() : ''
+    }
 
     function pickText(selectors) {
       for (const sel of selectors) {
@@ -36,14 +43,111 @@ if (window.bootstrapCollectorsLoaded) {
         if (v === undefined || v === null) continue
         qs.set(k, String(v))
       }
+      // 音乐 API 需要 msToken
+      if (!qs.has('msToken')) {
+        const msToken = getMsToken()
+        if (msToken) qs.set('msToken', msToken)
+      }
       return `${ORIGIN}${path}?${qs.toString()}`
     }
 
+    function trySignUrl(url) {
+      // 探测页面签名能力并缓存
+      if (window.__DOLIKE_SIGNER__) {
+        try {
+          const signed = window.__DOLIKE_SIGNER__(url)
+          if (signed) return signed
+        } catch(e) {}
+      }
+      // 方法1: window.byted_acrawler.sign (旧版抖音)
+      if (window.byted_acrawler && typeof window.byted_acrawler.sign === 'function') {
+        try {
+          const result = window.byted_acrawler.sign({ url })
+          if (result && result.url) return result.url
+          if (typeof result === 'string') return result
+        } catch(e) {}
+      }
+      // 方法2: window.abogus.generate (新版)
+      if (window.abogus) {
+        try {
+          if (typeof window.abogus.generate === 'function') {
+            const signed = window.abogus.generate(url)
+            if (signed) return signed
+          }
+          if (typeof window.abogus === 'function') {
+            const signed = window.abogus(url)
+            if (signed) return signed
+          }
+        } catch(e) {}
+      }
+      // 方法3: window.XBogus
+      if (window.XBogus && typeof window.XBogus.build === 'function') {
+        try {
+          const signed = window.XBogus.build(url)
+          if (signed) return signed
+        } catch(e) {}
+      }
+      // 方法4: 搜索 webpack 模块里的签名函数
+      try {
+        // 抖音页面通常把签名器挂在 webpack 模块里
+        for (const chunk of (window.webpackChunkdouyin_web || window.webpackChunk || [])) {
+          if (!chunk || !chunk[1]) continue
+          for (const [id, mod] of Object.entries(chunk[1])) {
+            if (typeof mod === 'function') {
+              const src = mod.toString()
+              if (src.includes('a_bogus') && src.includes('sign')) {
+                try {
+                  const result = mod(null, url)
+                  if (result && typeof result === 'string') {
+                    window.__DOLIKE_SIGNER__ = (u) => mod(null, u)
+                    console.log('[DoList] found webpack signer in chunk', id)
+                    return result
+                  }
+                } catch(e) {}
+              }
+            }
+          }
+        }
+      } catch(e) {}
+      return null
+    }
+
+    function dyXhr(path, query, signedUrl) {
+      const url = signedUrl || buildUrl(path, query)
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('GET', url, true)
+        xhr.withCredentials = true
+        xhr.setRequestHeader('Accept', 'application/json, text/plain, */*')
+        xhr.setRequestHeader('Referer', ORIGIN + '/')
+        xhr.setRequestHeader('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8')
+        xhr.onload = function () {
+          if (xhr.status < 200 || xhr.status >= 300) {
+            reject(new Error(`douyin ${path} ${xhr.status}`))
+            return
+          }
+          try {
+            const json = JSON.parse(xhr.responseText)
+            resolve(json)
+          } catch (e) {
+            reject(new Error(`douyin ${path} parse error: ${e.message}`))
+          }
+        }
+        xhr.onerror = function () { reject(new Error(`douyin ${path} network error`)) }
+        xhr.send()
+      })
+    }
+
     async function dyGet(path, query) {
-      const url = buildUrl(path, query)
-      const r = await fetch(url, { credentials: 'include' })
-      if (!r.ok) throw new Error(`douyin ${path} ${r.status}`)
-      const json = await r.json()
+      let url = buildUrl(path, query)
+      // 尝试用页面签名函数加 a_bogus
+      const signed = trySignUrl(url)
+      if (signed) {
+        url = signed
+        console.log(`[DoList] dyGet: signed url ${url}`)
+      }
+      console.log(`[DoList] dyGet: fetching ${url}`)
+      const json = await dyXhr(path, query, url)
       if (json && typeof json === 'object' && 'status_code' in json && json.status_code !== 0) {
         const msg = json.status_msg || `status_code=${json.status_code}`
         throw new Error(`douyin 接口风控：${msg}`)
@@ -362,36 +466,158 @@ if (window.bootstrapCollectorsLoaded) {
       const out = []
       let cursor = 0
 
+      // 音乐 API 需要 a_bogus 签名，页面自身没有暴露签名函数
+      // 方案：通过 background 调后端签名代理（需要账号已绑定 cookie）
       for (let page = 0; page < maxPages; page++) {
+        const query = {
+          sec_user_id: 'self',
+          count: 20,
+          max_cursor: cursor,
+          locate_query: false
+        }
+
         let r = null
-        const candidates = [
-          { path: '/aweme/v1/web/music/listcollection/', query: { count: 20, cursor } },
-          { path: '/aweme/v1/web/music/collect/list/', query: { count: 20, cursor } },
-          { path: '/aweme/v1/web/music/list/', query: { count: 20, cursor } }
-        ]
-        for (const c of candidates) {
+
+        // 先尝试后端签名代理
+        try {
+          r = await proxySignedRequest('/aweme/v1/web/music/listcollection/', query)
+          if (r && typeof r === 'object' && !r.error) {
+            console.log(`[DoList] music collector: proxy ok, status_code=${r.status_code ?? 0}`)
+          }
+        } catch (e) {
+          console.warn('[DoList] music collector: proxy failed:', e?.message || e)
+        }
+
+        // 代理失败则尝试直接请求（不需要签名的端点可能成功）
+        if (!r || r.error || (r.status_code && r.status_code !== 0)) {
           try {
-            r = await dyGet(c.path, c.query)
-            if (r && typeof r === 'object') break
+            r = await dyGet('/aweme/v1/web/music/listcollection/', query)
+            if (r && typeof r === 'object') {
+              console.log(`[DoList] music collector: direct ok, status_code=${r.status_code ?? 0}`)
+            }
           } catch (e) {
-            void e
+            console.warn('[DoList] music collector: direct failed:', e?.message || e)
           }
         }
-        if (!r) break
+
+        if (!r || r.error || (r.status_code && r.status_code !== 0)) {
+          console.warn('[DoList] music collector: all methods failed, stopping. Last error:', r?.error || r?.status_msg)
+          break
+        }
 
         const items = Array.isArray(r?.music_list) ? r.music_list
           : Array.isArray(r?.aweme_list) ? r.aweme_list
           : Array.isArray(r?.data) ? r.data
           : []
+
         if (items.length === 0) break
         out.push(...items)
         if (!r?.has_more) break
-        cursor = Number(r?.cursor) || cursor + items.length
+        cursor = Number(r?.max_cursor) || cursor + items.length
         await new Promise(res => setTimeout(res, pageDelayMs))
       }
 
-      if (out.length === 0) return fallbackVisibleAwemes()
+      if (out.length === 0) {
+        console.warn('[DoList] collectCollectMusicList: no items from API, trying SSR data')
+        const ssrData = tryExtractMusicFromPage()
+        if (ssrData.length > 0) {
+          console.log(`[DoList] collectCollectMusicList: extracted ${ssrData.length} items from page SSR`)
+          return ssrData
+        }
+        console.warn('[DoList] collectCollectMusicList: no items collected, falling back to visible awemes')
+        return fallbackVisibleAwemes()
+      }
+      console.log(`[DoList] collectCollectMusicList: collected ${out.length} music items`)
       return out
+    }
+
+    // 通过 background 调后端签名代理
+    function proxySignedRequest(path, query) {
+      return new Promise((resolve, reject) => {
+        try {
+          chrome.runtime.sendMessage(
+            { type: 'signedProxy', path, query },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message))
+                return
+              }
+              resolve(response)
+            }
+          )
+        } catch (e) {
+          reject(e)
+        }
+      })
+    }
+
+    // 尝试从页面 SSR/SPA 数据中提取音乐列表
+    function tryExtractMusicFromPage() {
+      const results = []
+      try {
+        // 方法1: window.__INITIAL_STATE__ (SSR 数据)
+        const initState = window.__INITIAL_STATE__
+        if (initState) {
+          console.log('[DoList] SSR: __INITIAL_STATE__ found, keys:', Object.keys(initState))
+          // 递归搜索 music_list
+          const musicList = findMusicList(initState)
+          if (musicList && musicList.length > 0) {
+            return musicList
+          }
+        }
+        // 方法2: window.__SSR_DATA__
+        const ssrData = window.__SSR_DATA__
+        if (ssrData) {
+          console.log('[DoList] SSR: __SSR_DATA__ found')
+          const musicList = findMusicList(ssrData)
+          if (musicList && musicList.length > 0) return musicList
+        }
+        // 方法3: 从 DOM 中提取 musicId
+        const musicIds = new Set()
+        // 音乐收藏页面的链接格式
+        const links = document.querySelectorAll('a[href*="music-detail"]')
+        for (const a of links) {
+          const href = a.getAttribute('href') || ''
+          const m = /music-detail\?music_id=(\d+)/.exec(href)
+          if (m) musicIds.add(m[1])
+        }
+        if (musicIds.size > 0) {
+          console.log(`[DoList] SSR: found ${musicIds.size} music links in DOM`)
+          // 有 musicId 但没详细信息，返回 ID 列表让后端用 detail API 补全
+          for (const id of musicIds) {
+            results.push({ id, id_str: String(id), __fromDom: true })
+          }
+        }
+      } catch (e) {
+        console.warn('[DoList] SSR extraction error:', e)
+      }
+      return results
+    }
+
+    function findMusicList(obj, depth = 0) {
+      if (depth > 10 || !obj || typeof obj !== 'object') return null
+      if (Array.isArray(obj)) {
+        // 检查是否是音乐列表
+        if (obj.length > 0 && (obj[0].music_id || obj[0].id || obj[0].title)) {
+          return obj
+        }
+        for (const item of obj) {
+          const found = findMusicList(item, depth + 1)
+          if (found) return found
+        }
+        return null
+      }
+      // 直接包含 music_list 键
+      if (Array.isArray(obj.music_list)) return obj.music_list
+      if (Array.isArray(obj.musicList)) return obj.musicList
+      // 递归搜索
+      for (const val of Object.values(obj)) {
+        if (val && typeof val === 'object') {
+          const found = findMusicList(val, depth + 1)
+          if (found) return found
+        }
+      }
+      return null
     }
 
     window.__DOLIKE__ = window.__DOLIKE__ || {}

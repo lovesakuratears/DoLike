@@ -2,7 +2,8 @@
 
 const KEYS = {
   backendUrl: 'backendUrl',
-  pushToken: 'pushToken'
+  pushToken: 'pushToken',
+  cookie: 'cookie'
 }
 
 const DEFAULTS = {
@@ -11,10 +12,11 @@ const DEFAULTS = {
 }
 
 export async function loadConfig() {
-  const got = await chrome.storage.local.get([KEYS.backendUrl, KEYS.pushToken])
+  const got = await chrome.storage.local.get([KEYS.backendUrl, KEYS.pushToken, KEYS.cookie])
   return {
     backendUrl: (got[KEYS.backendUrl] || DEFAULTS.backendUrl).replace(/\/$/, ''),
-    pushToken: got[KEYS.pushToken] || DEFAULTS.pushToken
+    pushToken: got[KEYS.pushToken] || DEFAULTS.pushToken,
+    cookie: got[KEYS.cookie] || ''
   }
 }
 
@@ -22,6 +24,7 @@ export async function saveConfig(cfg) {
   const payload = {}
   if (typeof cfg.backendUrl === 'string') payload[KEYS.backendUrl] = cfg.backendUrl.trim().replace(/\/$/, '')
   if (typeof cfg.pushToken === 'string') payload[KEYS.pushToken] = cfg.pushToken.trim()
+  if (typeof cfg.cookie === 'string') payload[KEYS.cookie] = cfg.cookie.trim()
   await chrome.storage.local.set(payload)
 }
 

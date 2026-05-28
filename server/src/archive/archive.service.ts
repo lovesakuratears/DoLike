@@ -1,8 +1,8 @@
 // 归档主流程
 //
 // 入口：
-//   - startFull(accountId)           全量抓取所有支持的 linkKind
-//   - startIncremental(accountId)    增量：fetcher 命中已存在 awemeId 即停翻页
+//   - startFull(accountId)           全量抓取当前已支持的 linkKind
+//   - startIncremental(accountId)    增量：fetcher 命中已存在 contentId 即停翻页（音乐/合集列表目前仍偏保守）
 //   - ingestExternalItems(...)       方案 C / bridge 推送场景下，外部 caller 把 items 喂给同样的 normalize+dedup+enqueue 管线
 //
 // 进度回调：可选 onProgress(stage, payload)，用于 WS 推送
@@ -14,12 +14,17 @@ import { getLogger } from '../core/logger.js'
 import { hasUserKey } from '../core/keystore.js'
 import {
   paginateUserCollectVideo,
+  paginateUserCollectMusic,
+  paginateUserCollectMixVideos,
   paginateUserLike,
   paginateUserPost,
+  paginateUserSelfMixVideos,
+  listCollectedMixes,
+  listUserMixes,
   type FetcherOpts
 } from './fetchers/index.js'
 import { upsertContentWithLink } from './dedup.js'
-import { normalizeVideoAweme, type RawAwemeLike } from './normalize.js'
+import { normalizeMusicItem, normalizeVideoAweme, type RawAwemeLike } from './normalize.js'
 import { enqueueDownloadsForContent } from '../download/queue.service.js'
 import type { LinkKind } from './types.js'
 
@@ -129,11 +134,11 @@ async function ingestOne(
   ctx: RunCtx,
   raw: RawAwemeLike,
   linkKind: LinkKind,
-  opts: { folderId?: string | null; mixId?: string | null } = {}
+  opts: { folderId?: string | null; mixId?: string | null; mode?: 'video' | 'music' } = {}
 ): Promise<void> {
-  if (!raw.aweme_id) return
+  const content = opts.mode === 'music' ? normalizeMusicItem(raw) : normalizeVideoAweme(raw)
+  if (!content.awemeId) return
   const prisma = getPrisma()
-  const content = normalizeVideoAweme(raw)
   const r = await upsertContentWithLink(
     prisma,
     ctx.account.id,
@@ -145,7 +150,6 @@ async function ingestOne(
     linkKind,
     awemeId: content.awemeId
   })
-  // 入下载队列（只对 VIDEO 且新 content）
   if (r.isNewContent) {
     await enqueueDownloadsForContent({
       localUserId: ctx.localUserId,
@@ -157,6 +161,7 @@ async function ingestOne(
       mixId: opts.mixId ?? null,
       awemeId: content.awemeId,
       publishAt: content.publishAt,
+      mediaKind: content.kind === 'MUSIC' ? 'audio' : 'video',
       videoUrl: content.mediaUrl,
       coverUrl: content.coverUrl
     })
@@ -188,7 +193,8 @@ async function runFetcher(
         const meta = item as { __folderId?: string; __mixId?: string }
         await ingestOne(ctx, item, linkKind, {
           folderId: meta.__folderId ?? null,
-          mixId: meta.__mixId ?? null
+          mixId: meta.__mixId ?? null,
+          mode: linkKind === 'COLLECT_MUSIC' ? 'music' : 'video'
         })
         if (total % 20 === 0) log.info({ total, failed }, 'fetcher progress')
         void beforeNew
@@ -212,11 +218,63 @@ async function runFetcher(
   return { total, failed }
 }
 
+async function upsertMix(
+  ctx: RunCtx,
+  kind: 'self' | 'collected',
+  raw: Record<string, unknown>
+): Promise<void> {
+  const prisma = getPrisma()
+  const mix = raw as {
+    mix_id?: string
+    mix_name?: string
+    create_time?: number | string
+    author?: { sec_uid?: string; nickname?: string }
+    cover_url?: { url_list?: string[] }
+    statis?: { updated_to_episode?: number }
+  }
+  const mixId = String(mix.mix_id ?? '')
+  if (!mixId) return
+  const createTime = mix.create_time
+  const publishAt = createTime != null && Number.isFinite(Number(createTime))
+    ? new Date(Number(createTime) * 1000)
+    : null
+  await prisma.mix.upsert({
+    where: {
+      douyinAccountId_mixId: {
+        douyinAccountId: ctx.account.id,
+        mixId
+      }
+    },
+    create: {
+      douyinAccountId: ctx.account.id,
+      mixId,
+      kind,
+      name: String(mix.mix_name ?? mixId),
+      authorSecUid: mix.author?.sec_uid ?? ctx.account.secUid,
+      authorName: mix.author?.nickname ?? ctx.account.nickname,
+      coverPath: null,
+      itemCount: Number(mix.statis?.updated_to_episode ?? 0),
+      publishAt,
+      rawMeta: JSON.stringify(raw)
+    },
+    update: {
+      kind,
+      name: String(mix.mix_name ?? mixId),
+      authorSecUid: mix.author?.sec_uid ?? ctx.account.secUid,
+      authorName: mix.author?.nickname ?? ctx.account.nickname,
+      itemCount: Number(mix.statis?.updated_to_episode ?? 0),
+      publishAt,
+      rawMeta: JSON.stringify(raw),
+      archivedAt: new Date()
+    }
+  })
+}
+
 export async function runArchive(
   localUserId: number,
   accountId: number,
   opts: { full: boolean; onProgress?: ProgressHook }
-): Promise<{ post: number; like: number; collectVideo: number }> {
+): Promise<{ post: number; like: number; collectVideo: number; collectMusic: number; selfMix: number; collectMix: number }> {
   const log = getLogger().child({ mod: 'archive', accountId, full: opts.full })
   // 同一账号同时只允许一个 run；如果已有 running/paused 直接拒。
   const existing = runs.get(accountId)
@@ -251,19 +309,33 @@ export async function runArchive(
       knownIds,
       full: opts.full
     }
-    log.info('archive: launching 3 fetchers (POST/LIKE/FAVORITE)')
-    const [post, like, collectVideo] = await Promise.allSettled([
+    const [selfMixes, collectedMixes] = await Promise.all([
+      listUserMixes(fetcherOpts),
+      listCollectedMixes(fetcherOpts)
+    ])
+    await Promise.all([
+      ...selfMixes.map((mix) => upsertMix(ctx, 'self', mix.raw)),
+      ...collectedMixes.map((mix) => upsertMix(ctx, 'collected', mix.raw))
+    ])
+    log.info('archive: launching 6 fetchers (POST/LIKE/FAVORITE/COLLECT_MUSIC/SELF_MIX/COLLECT_MIX)')
+    const [post, like, collectVideo, collectMusic, selfMix, collectMix] = await Promise.allSettled([
       runFetcher(ctx, 'POST', paginateUserPost(fetcherOpts)),
       runFetcher(ctx, 'LIKE', paginateUserLike(fetcherOpts)),
-      runFetcher(ctx, 'FAVORITE', paginateUserCollectVideo(fetcherOpts))
+      runFetcher(ctx, 'FAVORITE', paginateUserCollectVideo(fetcherOpts)),
+      runFetcher(ctx, 'COLLECT_MUSIC', paginateUserCollectMusic(fetcherOpts) as AsyncGenerator<RawAwemeLike>),
+      runFetcher(ctx, 'SELF_MIX', paginateUserSelfMixVideos(fetcherOpts)),
+      runFetcher(ctx, 'COLLECT_MIX', paginateUserCollectMixVideos(fetcherOpts))
     ])
-    for (const [kind, r] of [['POST', post], ['LIKE', like], ['FAVORITE', collectVideo]] as const) {
+    for (const [kind, r] of [['POST', post], ['LIKE', like], ['FAVORITE', collectVideo], ['COLLECT_MUSIC', collectMusic], ['SELF_MIX', selfMix], ['COLLECT_MIX', collectMix]] as const) {
       if (r.status === 'rejected') log.error({ kind, err: r.reason }, 'fetcher promise rejected')
     }
     const summary = {
       post: post.status === 'fulfilled' ? post.value.total : 0,
       like: like.status === 'fulfilled' ? like.value.total : 0,
-      collectVideo: collectVideo.status === 'fulfilled' ? collectVideo.value.total : 0
+      collectVideo: collectVideo.status === 'fulfilled' ? collectVideo.value.total : 0,
+      collectMusic: collectMusic.status === 'fulfilled' ? collectMusic.value.total : 0,
+      selfMix: selfMix.status === 'fulfilled' ? selfMix.value.total : 0,
+      collectMix: collectMix.status === 'fulfilled' ? collectMix.value.total : 0
     }
     log.info({ summary, status: handle.status }, 'archive: all fetchers settled')
     return summary
@@ -313,15 +385,25 @@ export async function ingestExternalItems(opts: {
   let added = 0
   let failed = 0
   const prisma = getPrisma()
+  const log = getLogger().child({ mod: 'archive', linkKind: opts.linkKind })
+  log.info({ totalItems: opts.items.length, sampleKeys: opts.items[0] ? Object.keys(opts.items[0]) : [] }, 'ingestExternalItems: start')
+  let skippedNoId = 0
   for (const raw of opts.items) {
-    if (!raw.aweme_id) continue
     const meta = raw as RawAwemeLike & { __folderId?: string; __mixId?: string }
+    const isMusic = opts.linkKind === 'COLLECT_MUSIC'
+    const rawAwemeId = isMusic
+      ? String((raw as Record<string, unknown>).id_str ?? (raw as Record<string, unknown>).id ?? '')
+      : String(raw.aweme_id ?? '')
+    if (!rawAwemeId) {
+      skippedNoId++
+      continue
+    }
     const before = await prisma.content.findUnique({
       where: {
         douyinAccountId_awemeId_kind: {
           douyinAccountId: account.id,
-          awemeId: String(raw.aweme_id),
-          kind: 'VIDEO'
+          awemeId: rawAwemeId,
+          kind: isMusic ? 'MUSIC' : 'VIDEO'
         }
       },
       select: { id: true }
@@ -329,7 +411,8 @@ export async function ingestExternalItems(opts: {
     try {
       await ingestOne(ctx, raw, opts.linkKind, {
         folderId: meta.__folderId ?? opts.folderId ?? null,
-        mixId: meta.__mixId ?? opts.mixId ?? null
+        mixId: meta.__mixId ?? opts.mixId ?? null,
+        mode: isMusic ? 'music' : 'video'
       })
       if (!before) added++
     } catch (e) {
@@ -337,10 +420,11 @@ export async function ingestExternalItems(opts: {
       opts.onProgress?.({
         type: 'fetch.failed',
         linkKind: opts.linkKind,
-        awemeId: String(raw.aweme_id),
+        awemeId: rawAwemeId,
         message: (e as Error).message
       })
     }
   }
+  log.info({ total: opts.items.length, added, failed, skippedNoId }, 'ingestExternalItems: done')
   return { total: opts.items.length, added, failed }
 }

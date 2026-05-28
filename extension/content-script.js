@@ -74,7 +74,8 @@ function toggleMenu(btn) {
     ['推送喜欢', () => sendAction({ type: 'push', linkKind: 'LIKE' }, '已推送喜欢')],
     ['推送收藏', () => sendAction({ type: 'push', linkKind: 'FAVORITE' }, '已推送收藏')],
     ['推送稍后再看', () => sendAction({ type: 'push', linkKind: 'WATCH_LATER' }, '已推送稍后再看')],
-    ['推送收藏夹视频', () => sendAction({ type: 'push', linkKind: 'COLLECT_FOLDER' }, '已推送收藏夹视频')]
+    ['推送收藏夹视频', () => sendAction({ type: 'push', linkKind: 'COLLECT_FOLDER' }, '已推送收藏夹视频')],
+    ['推送收藏音乐', () => sendAction({ type: 'push', linkKind: 'COLLECT_MUSIC' }, '已推送收藏音乐')]
   ]
 
   for (const [text, handler] of actions) {
