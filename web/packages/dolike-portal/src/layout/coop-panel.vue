@@ -18,7 +18,7 @@ const hideKeyboard = () => {
 <template>
   <div class="coop-panel">
     <div class="coop-panel-item">
-      <a class="panel-link" target="_blank">
+      <a class="panel-link" href="https://github.com/lovesakuratears/DoLike/blob/main/docs/FAQ.md" target="_blank" rel="noopener noreferrer">
         <div class="xxbkuAal">
           <div class="icon-container">
             <svg-icon icon="theme-mode" class="icon" />
@@ -46,7 +46,7 @@ const hideKeyboard = () => {
       </a>
     </div>
     <div class="coop-panel-item">
-      <a class="panel-link" target="_blank">
+      <a class="panel-link" href="https://github.com/lovesakuratears/DoLike/blob/main/docs/FAQ.md" target="_blank" rel="noopener noreferrer">
         <div class="icon-container">
           <svg-icon icon="setting-general" class="icon" />
           通用设置
@@ -56,7 +56,7 @@ const hideKeyboard = () => {
       <div class="general-panel" style="top: -12px">
         <div class="general-panel-content">
           <div class="coop-panel-item">
-            <a class="panel-link" target="_blank">
+            <a class="panel-link" href="https://github.com/lovesakuratears/DoLike/blob/main/docs/FAQ.md" target="_blank" rel="noopener noreferrer">
               <div class="icon-container">
                 <svg-icon icon="setting-privacy" class="icon" />
                 隐私设置
@@ -64,7 +64,7 @@ const hideKeyboard = () => {
             </a>
           </div>
           <div class="coop-panel-item">
-            <a class="panel-link" target="_blank">
+            <a class="panel-link" href="https://github.com/lovesakuratears/DoLike/blob/main/docs/FAQ.md" target="_blank" rel="noopener noreferrer">
               <div class="icon-container">
                 <svg-icon icon="setting-notification" class="icon" />
                 通知设置
@@ -72,7 +72,7 @@ const hideKeyboard = () => {
             </a>
           </div>
           <div class="coop-panel-item">
-            <a class="panel-link" target="_blank">
+            <a class="panel-link" href="https://github.com/lovesakuratears/DoLike/blob/main/docs/FAQ.md" target="_blank" rel="noopener noreferrer">
               <div class="icon-container">
                 <svg-icon icon="setting-default" class="icon" />
                 默认页面
@@ -95,7 +95,7 @@ const hideKeyboard = () => {
       </a>
     </div>
     <div class="coop-panel-item">
-      <a class="panel-link" target="_blank">
+      <a class="panel-link" href="https://github.com/lovesakuratears/DoLike/blob/main/docs/FAQ.md" target="_blank" rel="noopener noreferrer">
         <div class="icon-container">
           <svg-icon icon="faq" class="icon" />
           常见问题
