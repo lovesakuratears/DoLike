@@ -5,7 +5,7 @@ import { ok, fail, AppError, ERR } from '../core/errors.js'
 import * as accountStore from './account.store.js'
 import * as session from './session.service.js'
 import { pasteCookie } from './manual.driver.js'
-import { startCloakSession, getSession, cancelSession } from './cloak.driver.js'
+import { startCloakSession, startCloakSessionWithCookie, getSession, cancelSession } from './cloak.driver.js'
 import { preIssueToken, revokeToken } from './bridge.service.js'
 import { getPrisma } from '../core/db.js'
 
@@ -138,6 +138,32 @@ export default async function douyinRoutes(app: FastifyInstance) {
       const user = requireAuth(req, reply)
       const r = await preIssueToken(user.id)
       return ok(r)
+    } catch (err) {
+      if (handleApp(reply, err)) return
+      throw err
+    }
+  })
+
+  // ★ CloakBrowser 导入插件 Cookie —— 用插件推送的 cookie 启动 CloakBrowser 扫码流程
+  // 标记: CLOAK_IMPORT_COOKIE_ENDPOINT
+  app.post('/api/douyin/accounts/:id/cloak/import-cookie', async (req, reply) => {
+    try {
+      const user = requireAuth(req, reply)
+      const { id } = idParam.parse(req.params)
+      const acc = await accountStore.findById(user.id, id)
+      if (!acc) {
+        reply.status(404).send(fail(ERR.DOUYIN_ACCOUNT_NOT_FOUND, '账号不存在'))
+        return
+      }
+      if (!acc.cookieEnc) {
+        reply.status(400).send(fail(
+          ERR.DOUYIN_BROWSER_UNAVAILABLE,
+          '该账号未绑定 cookie，请先通过「插件推送 cookie」完成绑定',
+        ))
+        return
+      }
+      const sess = startCloakSessionWithCookie(user.id, id)
+      return ok({ sessionId: sess.id, wsPath: `/ws/douyin/cloak?session=${sess.id}` })
     } catch (err) {
       if (handleApp(reply, err)) return
       throw err

@@ -24,6 +24,14 @@ export async function listAccounts(localUserId: number): Promise<DouyinAccount[]
   })
 }
 
+export async function findPrimaryAccountByLocalUserId(localUserId: number): Promise<DouyinAccount | null> {
+  const prisma = getPrisma()
+  return prisma.douyinAccount.findFirst({
+    where: { localUserId },
+    orderBy: { createdAt: 'asc' }
+  })
+}
+
 export async function findById(localUserId: number, id: number): Promise<DouyinAccount | null> {
   const prisma = getPrisma()
   const a = await prisma.douyinAccount.findUnique({ where: { id } })

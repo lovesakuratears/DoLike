@@ -16,6 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'play', item: VideoListItem): void
   (e: 'folders-changed'): void
+  (e: 'extract-audio', ids: number[]): void
 }>()
 
 const items = ref<VideoListItem[]>([])
@@ -257,8 +258,26 @@ const addToFolder = async () => {
   }
 }
 
+const extractAudio = async () => {
+  console.log('[VideoGrid.extractAudio] clicked, selectedCount:', selectedCount.value, 'selectedIds:', Array.from(selectedIds.value))
+  if (selectedCount.value === 0) {
+    console.warn('[VideoGrid.extractAudio] no items selected, return')
+    return
+  }
+  const ids = Array.from(selectedIds.value)
+  console.log('[VideoGrid.extractAudio] emitting extract-audio with ids:', ids)
+  emit('extract-audio', ids)
+}
+
+const downloadSelected = async () => {
+  if (selectedCount.value === 0) return
+  const ids = Array.from(selectedIds.value)
+  emit('download', ids)
+}
+
 defineExpose({
-  refresh: fetchList
+  refresh: fetchList,
+  items: items
 })
 
 onMounted(openProgressWs)
@@ -283,12 +302,26 @@ onBeforeUnmount(stopRefreshPolling)
         添加到收藏夹
       </button>
       <button
+        class="tool-btn"
+        :disabled="selectedCount === 0"
+        @click="extractAudio"
+      >
+        提取音频
+      </button>
+      <button
+        class="tool-btn"
+        :disabled="selectedCount === 0"
+        @click="downloadSelected"
+      >
+        下载
+      </button>
+      <button
         class="tool-btn danger"
         :disabled="selectedCount === 0"
         :class="{ loading: deleting }"
         @click="deleteSelected"
       >
-        {{ folderId ? `移除（${selectedCount}）` : `删除（${selectedCount}）` }}
+        {{ folderId ? '移除' : '删除' }}
       </button>
       <span class="tool-info">本页 {{ items.length }} / 全部 {{ total }}，已选 {{ selectedCount }}</span>
     </div>

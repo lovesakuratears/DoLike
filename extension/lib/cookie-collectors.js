@@ -25,10 +25,36 @@
 // 只能拿同源非 HttpOnly cookie。
 
 export async function collectCookiesMethod1(domain = 'douyin.com') {
-  const cookies = await chrome.cookies.getAll({ domain })
+  // ★ 用 url 参数获取完整 cookie（包括 .douyin.com 父域的 HttpOnly cookie）
+  // domain 参数只匹配精确域，url 参数匹配所有相关域
+  const allCookies = []
+  const seen = new Set()
+
+  // 用多个 url 确保覆盖所有 cookie 域
+  const urls = [
+    `https://www.${domain}/`,
+    `https://${domain}/`,
+    `https://m.${domain}/`,
+  ]
+
+  for (const url of urls) {
+    try {
+      const cookies = await chrome.cookies.getAll({ url })
+      for (const c of cookies) {
+        const key = `${c.name}=${c.domain}=${c.path}`
+        if (!seen.has(key)) {
+          allCookies.push(c)
+          seen.add(key)
+        }
+      }
+    } catch (e) {
+      console.warn('[DoLike] collectCookiesMethod1 url failed:', url, e)
+    }
+  }
+
   return {
     method: 'chrome.cookies API',
-    cookies: cookies.map(c => ({
+    cookies: allCookies.map(c => ({
       name: c.name,
       value: c.value,
       domain: c.domain,
@@ -38,7 +64,7 @@ export async function collectCookiesMethod1(domain = 'douyin.com') {
       sameSite: c.sameSite,
       expirationDate: c.expirationDate
     })),
-    count: cookies.length
+    count: allCookies.length
   }
 }
 

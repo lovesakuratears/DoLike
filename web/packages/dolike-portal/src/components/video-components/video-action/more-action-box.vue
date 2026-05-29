@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import { ref, onUnmounted } from 'vue'
 import { Toast } from '@/components/ui/toast'
-import { useCount } from '@/hooks/useCount'
 import apis from '@/api/apis'
-import type { IMusicInfo } from '@/api/tyeps/request_response/musicDetailRes'
+// import type { IMusicInfo } from '@/api/tyeps/request_response/musicDetailRes' // 移除：使用未开放 API
 
 /** 组件 Props 接口 */
 interface Props {
   /** 关注状态: 0-未关注, 1-已关注, 2-互相关注, 3-已关注(特殊) */
   isAttent?: number
-  /** 音乐ID（用于获取音乐详情） */
-  musicId?: string
   /** 视频ID */
   awemeId?: string
   /** 用户ID */
@@ -19,7 +16,6 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   isAttent: 0,
-  musicId: '',
   awemeId: '',
   userId: ''
 })
@@ -35,42 +31,11 @@ const emit = defineEmits<{
   (e: 'collectMusic'): void
 }>()
 
-// 音乐播放状态
-const isPlaying = ref(false)
-const audioRef = ref<HTMLAudioElement | null>(null)
-
-// 音乐详情数据
-const musicDetailRef = ref<IMusicInfo | null>(null)
-const isLoadingMusicDetail = ref(false)
-
-// 获取音乐详情
-const fetchMusicDetail = async () => {
-  if (!props.musicId) {
-    return
-  }
-
-  // 如果已经加载过相同的音乐，不重复加载
-  if (musicDetailRef.value && musicDetailRef.value.id_str === props.musicId) {
-    return
-  }
-
-  isLoadingMusicDetail.value = true
-
-  try {
-    const response = await apis.getMusicDetail(props.musicId, 1)
-
-    if (response.status_code === 0 && response.music_info) {
-      musicDetailRef.value = response.music_info
-    }
-  } catch (error) {
-    console.error('获取音乐详情出错:', error)
-  } finally {
-    isLoadingMusicDetail.value = false
-  }
-}
-onMounted(() => {
-  fetchMusicDetail()
-})
+// 音乐详情获取已移除（官方未开放 API，待开放后恢复）
+// const isPlaying = ref(false)
+// const audioRef = ref<HTMLAudioElement | null>(null)
+// const musicDetailRef = ref<IMusicInfo | null>(null)
+// const isLoadingMusicDetail = ref(false)
 
 // 处理推荐
 const handleRecommend = () => {
@@ -114,111 +79,15 @@ const handleHotTrending = () => {
   emit('hotTrending')
 }
 
-// 处理收藏音乐
+// 处理收藏音乐（已移除，官方未开放 API）
 const handleCollectMusic = () => {
-  Toast.success('已收藏原声')
+  Toast.info('音乐收藏功能暂未开放')
   emit('collectMusic')
 }
 
-// 播放/暂停音乐
-const togglePlayMusic = () => {
-  const playUrls = musicDetailRef.value?.play_url?.url_list || []
-
-  if (!playUrls.length) {
-    Toast.warning('暂无音乐播放地址')
-    return
-  }
-
-  if (!audioRef.value) {
-    audioRef.value = new Audio(playUrls[0])
-    audioRef.value.onended = () => {
-      isPlaying.value = false
-    }
-  }
-
-  if (isPlaying.value) {
-    audioRef.value.pause()
-    isPlaying.value = false
-  } else {
-    audioRef.value.play()
-    isPlaying.value = true
-  }
-}
-
-// 下载音乐
-const isDownloading = ref(false)
-
-const downloadMusic = async () => {
-  // 检查是否允许下载
-  if (musicDetailRef.value?.prevent_download) {
-    Toast.warning('该音乐不允许下载')
-    return
-  }
-
-  const playUrls = musicDetailRef.value?.play_url?.url_list || []
-
-  if (!playUrls.length) {
-    Toast.warning('暂无音乐下载地址')
-    return
-  }
-
-  if (isDownloading.value) {
-    Toast.info('正在下载中...')
-    return
-  }
-
-  isDownloading.value = true
-  const fileName = `${musicDetailRef.value?.title || '原声音乐'}.mp3`
-
-  Toast.info('正在下载原声...')
-
-  // 遍历所有下载地址，直到成功
-  for (let i = 0; i < playUrls.length; i++) {
-    let url = playUrls[i]
-
-    // 将抖音相关域名转换为代理地址
-    if (url.includes('douyin.com')) {
-      url = url.replace(/https?:\/\/[^/]*douyin\.com/, '/douyin')
-    }
-
-    try {
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        continue
-      }
-
-      const blob = await response.blob()
-
-      // 检查是否是有效的音频文件
-      if (blob.size < 1000) {
-        continue
-      }
-
-      const blobUrl = window.URL.createObjectURL(blob)
-
-      const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = fileName
-      link.style.display = 'none'
-      document.body.appendChild(link)
-      link.click()
-
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(blobUrl)
-
-      Toast.success('下载成功')
-      isDownloading.value = false
-      return
-    } catch (error) {
-      continue
-    }
-  }
-
-  // 所有地址都失败
-  Toast.error('下载失败，请重试')
-  isDownloading.value = false
-}
+// 播放/暂停音乐（已移除，官方未开放 API）
+// const togglePlayMusic = () => { ... }
+// const downloadMusic = async () => { ... }
 
 // 组件卸载时停止播放
 onUnmounted(() => {
@@ -415,109 +284,6 @@ onUnmounted(() => {
         <div class="more-box-title">上热门</div>
       </div>
     </div>
-    <!-- 音乐信息区域 -->
-    <div class="more-music-detail">
-      <div class="more-music-author">
-        <div class="more-music-content">
-          <div class="more-music-icon">
-            <svg
-              width="20"
-              height="20"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 36 36"
-            >
-              <path
-                fill-rule="evenodd"
-                clip-rule="evenodd"
-                d="M8.783 8.886c.041.001.082.005.124.009V8.89l-.124-.004zm18.337 1.208a1.631 1.631 0 00-.537-1.24 1.589 1.589 0 00-1.277-.4h-.004l-10.57 1.641a1.58 1.58 0 00-1.365 1.553l-.215 11.82a3.2 3.2 0 00-2.438-1.241c-1.76-.048-3.212 1.355-3.244 3.134-.032 1.78 1.368 3.261 3.127 3.31 1.76.047 3.212-1.356 3.245-3.135l.17-9.368 12.307-2.026-.176 9.709a3.2 3.2 0 00-2.459-1.269c-1.76-.048-3.212 1.355-3.244 3.135-.033 1.779 1.368 3.26 3.127 3.309 1.76.048 3.212-1.356 3.244-3.135l.309-15.797z"
-                fill="currentColor"
-                fill-opacity="0.8"
-              ></path>
-            </svg>
-            <span class="music-name">
-              {{ musicDetailRef?.title }}
-            </span>
-          </div>
-          <div class="more-music-num">
-            {{ useCount(musicDetailRef?.user_count || 0) }}人使用
-          </div>
-        </div>
-      </div>
-      <!-- 音乐操作按钮 -->
-      <div class="music-actions">
-        <!-- 播放按钮 -->
-        <button
-          type="button"
-          class="music-action-btn"
-          @click="togglePlayMusic"
-          :title="isPlaying ? '暂停' : '播放'"
-        >
-          <svg
-            v-if="!isPlaying"
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-          >
-            <path
-              d="M8 5.14v13.72a1 1 0 001.5.86l11-6.86a1 1 0 000-1.72l-11-6.86a1 1 0 00-1.5.86z"
-              fill="currentColor"
-            ></path>
-          </svg>
-          <svg
-            v-else
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-          >
-            <path
-              d="M8 5a1 1 0 011 1v12a1 1 0 11-2 0V6a1 1 0 011-1zM16 5a1 1 0 011 1v12a1 1 0 11-2 0V6a1 1 0 011-1z"
-              fill="currentColor"
-            ></path>
-          </svg>
-        </button>
-        <!-- 下载按钮 -->
-        <button
-          type="button"
-          class="music-action-btn"
-          @click="downloadMusic"
-          title="下载"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-          >
-            <path
-              d="M12 3a1 1 0 011 1v10.586l3.293-3.293a1 1 0 111.414 1.414l-5 5a1 1 0 01-1.414 0l-5-5a1 1 0 111.414-1.414L11 14.586V4a1 1 0 011-1zM5 19a1 1 0 100 2h14a1 1 0 100-2H5z"
-              fill="currentColor"
-            ></path>
-          </svg>
-        </button>
-      </div>
-      <!-- 收藏按钮 -->
-      <button type="button" class="favorite-button" @click="handleCollectMusic">
-        <svg
-          width="12"
-          height="13"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 12 13"
-        >
-          <path
-            d="M6 2.771l.78 1.945c.164.41.546.693.986.73l2.12.176-1.648 1.466a1.167 1.167 0 00-.362 1.134l.49 2.13-1.74-1.104a1.167 1.167 0 00-1.251 0l-1.74 1.103.489-2.13a1.167 1.167 0 00-.362-1.133L2.113 5.622l2.121-.177c.441-.037.823-.319.987-.729l.78-1.945zM6.512.913a.543.543 0 00-1.024 0l-1.35 3.37-3.455.287c-.501.042-.7.719-.313 1.063L2.987 7.96l-.806 3.51c-.12.516.398.932.824.662L6 10.232l2.995 1.9c.426.27.943-.146.825-.663L9.013 7.96l2.617-2.327c.387-.344.188-1.021-.312-1.063l-3.455-.288-1.35-3.37z"
-            fill="#fff"
-          ></path>
-        </svg>
-        <span>收藏</span>
-      </button>
-    </div>
   </div>
 </template>
 
@@ -611,113 +377,6 @@ onUnmounted(() => {
         font-weight: 400;
         line-height: 16px;
         margin-top: 8px;
-      }
-    }
-  }
-
-  .more-music-detail {
-    align-items: center;
-    border-top: 1px solid var(--color-line-l3);
-    display: flex;
-    font-size: 12px;
-    justify-content: space-between;
-    margin-top: 16px;
-    padding-top: 16px;
-    width: 100%;
-    gap: 8px;
-
-    .more-music-author {
-      align-items: center;
-      display: flex;
-      flex: 1 1;
-      height: 36px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-
-      .more-music-content {
-        overflow: hidden;
-
-        .more-music-icon {
-          color: var(--color-text-t3);
-          font-size: 12px;
-          line-height: 18px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-
-          svg {
-            flex-shrink: 0;
-          }
-
-          .music-name {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          }
-        }
-
-        .more-music-num {
-          color: var(--color-text-t4);
-          font-size: 12px;
-          overflow: hidden;
-          padding-left: 24px;
-          text-overflow: ellipsis;
-        }
-      }
-    }
-
-    .music-actions {
-      display: flex;
-      gap: 4px;
-      flex-shrink: 0;
-
-      .music-action-btn {
-        align-items: center;
-        background: var(--color-bg-b2);
-        border: none;
-        border-radius: 50%;
-        color: var(--color-text-t3);
-        cursor: pointer;
-        display: flex;
-        height: 28px;
-        justify-content: center;
-        padding: 0;
-        transition: all 0.2s;
-        width: 28px;
-
-        &:hover {
-          background: var(--color-bg-b3);
-          color: var(--color-text-t1);
-        }
-
-        svg {
-          width: 16px;
-          height: 16px;
-        }
-      }
-    }
-
-    .favorite-button {
-      align-items: center;
-      background: #fe2c55;
-      border: none;
-      border-radius: 8px;
-      color: #fff;
-      cursor: pointer;
-      display: flex;
-      font-size: 12px;
-      gap: 4px;
-      height: 28px;
-      justify-content: center;
-      padding: 0 12px;
-      user-select: none;
-      flex-shrink: 0;
-
-      &:hover {
-        background-color: var(--color-primary-hover);
       }
     }
   }

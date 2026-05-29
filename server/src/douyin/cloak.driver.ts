@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AppError, ERR } from '../core/errors.js'
 import { getLogger } from '../core/logger.js'
+import { bindFromCookie, getDecryptedCookie } from './session.service.js'
 import { upsertAccount } from './account.store.js'
 import {
   closeContext,
@@ -25,7 +26,6 @@ import {
   type RuntimeCookie,
   type RuntimePage
 } from './browser.runtime.js'
-import { encryptCookieFor } from './cookie-codec.js'
 import { parseCookieString } from './cookie-parse.js'
 import type { ProfileSelfRaw } from './dy-client.js'
 import type { CloakEvent, CloakStage } from './types.js'
@@ -39,6 +39,8 @@ interface CloakSession {
   createdAt: number
   lastEvent: CloakEvent | null
   cleanupTimer: NodeJS.Timeout | null
+  /** 导入 Cookie 模式：启动前注入该账号的 cookie */
+  importAccountId?: number
 }
 
 const sessions = new Map<string, CloakSession>()
@@ -77,6 +79,12 @@ const QR_SELECTORS = [
 ] as const
 
 export function startCloakSession(localUserId: number): CloakSession {
+  return startCloakSessionWithCookie(localUserId, undefined)
+}
+
+// ★ 带 Cookie 启动 CloakBrowser —— 导入插件 Cookie 后走扫码确认流程
+// 标记: CLOAK_WITH_COOKIE
+export function startCloakSessionWithCookie(localUserId: number, accountId?: number): CloakSession {
   const id = randomUUID()
   const sess: CloakSession = {
     id,
@@ -86,7 +94,8 @@ export function startCloakSession(localUserId: number): CloakSession {
     abort: new AbortController(),
     createdAt: Date.now(),
     lastEvent: null,
-    cleanupTimer: null
+    cleanupTimer: null,
+    importAccountId: accountId
   }
   sessions.set(id, sess)
   void runReal(sess)
@@ -147,6 +156,24 @@ async function runReal(sess: CloakSession): Promise<void> {
     log.info('browser context launched, opening douyin.com')
 
     const page = await ctx.newPage()
+
+    // ★ 导入 Cookie 模式：先注入插件 cookie，再打开抖音
+    // 标记: CLOAK_IMPORT_COOKIE_INJECT
+    if (sess.importAccountId) {
+      const { getPrisma } = await import('../core/db.js')
+      const prisma = getPrisma()
+      const acc = await prisma.douyinAccount.findUnique({ where: { id: sess.importAccountId } })
+      if (acc?.cookieEnc) {
+        const cookieStr = getDecryptedCookie(sess.localUserId, acc)
+        if (cookieStr) {
+          const { parseCookieToEntries } = await import('./browser.runtime.js')
+          await ctx.addCookies(parseCookieToEntries(cookieStr))
+          log.info({ accountId: sess.importAccountId }, 'imported plugin cookie into CloakBrowser')
+          emit(sess, 'starting', { message: '已注入 Cookie，正在打开抖音…' })
+        }
+      }
+    }
+
     await page.goto('https://www.douyin.com/', {
       waitUntil: 'domcontentloaded',
       timeout: PAGE_GOTO_TIMEOUT
@@ -378,16 +405,29 @@ async function finishWithCookies(
     log.info({ secUid, nickname, source: 'navigation' }, 'profile resolved via navigation')
   }
 
-  const enc = encryptCookieFor(sess.localUserId, cookieStr.trim())
-  const account = await upsertAccount({
-    localUserId: sess.localUserId,
-    secUid,
-    nickname,
-    avatarUrl,
-    cookieEnc: enc,
-    cookieSource: 'cloak',
-    isValid: true
-  })
+  let account
+  if (sess.importAccountId) {
+    account = await bindFromCookie({
+      localUserId: sess.localUserId,
+      accountId: sess.importAccountId,
+      cookie: cookieStr,
+      source: 'cloak',
+      preserveProfile: true
+    })
+    log.info({ accountId: account.id, secUid, nickname }, 'import-cookie: account updated with new cookie')
+  } else {
+    account = await upsertAccount({
+      localUserId: sess.localUserId,
+      secUid,
+      nickname,
+      avatarUrl,
+      cookieEnc: await import('./cookie-codec.js').then(({ encryptCookieFor }) =>
+        encryptCookieFor(sess.localUserId, cookieStr.trim())
+      ),
+      cookieSource: 'cloak',
+      isValid: true
+    })
+  }
   emit(sess, 'success', { accountId: account.id, message: '账号已保存' })
 }
 

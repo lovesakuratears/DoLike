@@ -6,7 +6,6 @@
 import type { DouyinAccount } from '@prisma/client'
 import {
   fetchCollectsVideoList,
-  fetchUserCollectMusic,
   fetchUserCollectMix,
   fetchUserCollectsList,
   fetchUserLikePage,
@@ -126,29 +125,6 @@ export async function* paginateUserCollectVideo(opts: FetcherOpts): AsyncGenerat
       cursor = nx
       await sleep(opts.pageDelayMs ?? 800)
     }
-  }
-}
-
-export async function* paginateUserCollectMusic(opts: FetcherOpts): AsyncGenerator<Record<string, unknown>> {
-  let cursor = 0
-  for (let safety = 0; safety < 200; safety++) {
-    const r = await fetchUserCollectMusic(opts.localUserId, opts.account, {
-      cursor,
-      count: PAGE_SIZE
-    })
-    if (!r.data) return
-    const list = r.data.mc_list ?? []
-    for (const it of list) {
-      const id = String(it.id_str ?? it.id ?? '')
-      if (!id) continue
-      if (!opts.full && opts.knownIds && opts.knownIds.has(id)) return
-      yield it
-    }
-    if (!r.data.has_more) return
-    const nx = Number(r.data.cursor ?? 0)
-    if (!Number.isFinite(nx) || nx === cursor) return
-    cursor = nx
-    await sleep(opts.pageDelayMs ?? 800)
   }
 }
 

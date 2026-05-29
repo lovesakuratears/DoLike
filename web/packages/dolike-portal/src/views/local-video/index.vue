@@ -84,7 +84,20 @@ const fetchVideo = async () => {
 }
 
 const goBack = () => {
-  router.back()
+  // 如果有来源信息，返回时带回，让 my 页面恢复之前的 tab/link 状态
+  const fromLink = route.query.fromLink
+  const fromTab = route.query.fromTab
+  if (fromLink || fromTab) {
+    router.push({
+      path: '/my',
+      query: {
+        ...(fromTab ? { tab: fromTab } : {}),
+        ...(fromLink ? { link: fromLink } : {})
+      }
+    })
+  } else {
+    router.back()
+  }
 }
 
 const formatDuration = (s: number): string => {

@@ -128,6 +128,33 @@ async function doHandshake() {
 // ─── Cookie 采集（M1 chrome.cookies API） ────────────────────────────
 // 标记: COOKIE_COLLECT_M1 — 绑定插件时自动调用，获取 douyin.com Cookie
 
+// ─── 发送消息到 background ──────────────────────────────────────────
+function sendAction(payload, label) {
+  if (!chrome?.runtime?.id || typeof chrome.runtime.sendMessage !== 'function') {
+    const msg = '扩展上下文已失效，请在 chrome://extensions 里重新加载 DoLike 扩展'
+    setStatus(msg, 'err')
+    void appendLog('err', label, msg)
+    return
+  }
+  console.log('[DoList] popup sendAction:', payload.type, payload.linkKind || '')
+  setStatus(`${label}中…`)
+  let settled = false
+  const timer = setTimeout(() => {
+    if (settled) return
+    settled = true
+    const msg = `${label}超时：后台脚本未返回结果，请先到 chrome://extensions 查看 DoLike 扩展的 Service Worker 日志`
+    setStatus(msg, 'err')
+    void appendLog('err', label, msg)
+  }, 12000)
+  chrome.runtime.sendMessage(payload, resp => {
+    if (settled) return
+    settled = true
+    clearTimeout(timer)
+    console.log('[DoList] popup response:', resp)
+    handleResponse(resp, label, payload.type)
+  })
+}
+
 // Cookie 绑定已改为在 portal 页面手动粘贴
 
 function handleResponse(resp, label, type) {
@@ -141,13 +168,17 @@ function handleResponse(resp, label, type) {
     let msg = type === 'ping' ? '抖音页面可用' : `${label}成功`
     if (type === 'init') {
       const nickname = resp?.data?.profile?.nickname || resp?.data?.dto?.nickname || '抖音用户'
-      msg = `绑定成功：${nickname}`
+      const cookieCollected = resp?.data?.cookieCollected
+      msg = `绑定成功：${nickname}` + (cookieCollected ? '（已自动采集 Cookie）' : '（未采集到 Cookie，音乐下载可能不可用）')
     } else if (type === 'push') {
       const pushed = Number(resp?.data?.pushed || 0)
       const nickname = resp?.data?.profile?.nickname || '抖音用户'
       msg = pushed > 0
         ? `${label}成功：${nickname}，采集 ${pushed} 条`
         : `${label}成功：${nickname}，采集 0 条（请确认当前页面已加载对应列表）`
+    } else if (type === 'pushCookie') {
+      const nickname = resp?.data?.dto?.nickname || resp?.data?.profile?.nickname || '抖音用户'
+      msg = `${label}成功：${nickname}，Cookie 已更新`
     }
     setStatus(msg, 'ok')
     appendLog('ok', label, msg)
@@ -164,6 +195,12 @@ function handleResponse(resp, label, type) {
 async function collectCookiesAdvanced(method) {
   const label = `方法${method}采集`
   setStatus(`${label}中…`)
+  if (!chrome?.runtime?.id || typeof chrome.runtime.sendMessage !== 'function') {
+    const msg = '扩展上下文已失效，请在 chrome://extensions 里重新加载 DoLike 扩展'
+    setStatus(msg, 'err')
+    void appendLog('err', label, msg)
+    return
+  }
 
   const msg = {
     type: 'collectCookies',
@@ -216,12 +253,12 @@ document.querySelectorAll('button[data-act]').forEach(btn => {
     const act = btn.getAttribute('data-act')
     if (act === 'init') sendAction({ type: 'init' }, '绑定插件')
     else if (act === 'ping-page') sendAction({ type: 'ping' }, '检查抖音页')
+    else if (act === 'push-cookie') sendAction({ type: 'pushCookie' }, '推送 Cookie')
     else if (act === 'push-post') sendAction({ type: 'push', linkKind: 'POST' }, '推送作品')
     else if (act === 'push-like') sendAction({ type: 'push', linkKind: 'LIKE' }, '推送喜欢')
     else if (act === 'push-favorite') sendAction({ type: 'push', linkKind: 'FAVORITE' }, '推送收藏')
     else if (act === 'push-watch-later') sendAction({ type: 'push', linkKind: 'WATCH_LATER' }, '推送稍后再看')
     else if (act === 'push-collect-folder') sendAction({ type: 'push', linkKind: 'COLLECT_FOLDER' }, '推送收藏夹视频')
-    else if (act === 'push-collect-music') sendAction({ type: 'push', linkKind: 'COLLECT_MUSIC' }, '推送收藏音乐')
   })
 })
 

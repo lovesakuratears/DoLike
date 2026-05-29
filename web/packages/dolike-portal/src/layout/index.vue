@@ -4,6 +4,7 @@ import AsideBar from '@/layout/AsideBar.vue'
 import HeaderNav from '@/layout/HeaderNav.vue'
 import { useRouter } from 'vue-router'
 import { userStore } from '@/stores/user'
+import GlobalAudioPlayer from '@/components/audio-player/GlobalAudioPlayer.vue'
 // 设置背景颜色
 const backgroundColor = ref(true)
 const isScrolled = ref(false)
@@ -83,6 +84,7 @@ watchEffect(() => {
         <!-- </keep-alive> -->
       </router-view>
     </div>
+    <GlobalAudioPlayer />
   </div>
 </template>
 

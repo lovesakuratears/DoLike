@@ -10,7 +10,8 @@ import { AppError, ERR } from '../core/errors.js'
 import {
   bindFromBridgeWithoutCookie,
   bindFromCookie,
-  findByPushToken
+  findByPushToken,
+  resolveSingleUserAccount
 } from './session.service.js'
 import { issuePushToken, revokePushToken, toDTO, upsertAccount } from './account.store.js'
 import { ingestExternalItems } from '../archive/archive.service.js'
@@ -24,7 +25,6 @@ const linkKindEnum = z.enum([
   'FAVORITE',
   'WATCH_LATER',
   'COLLECT_FOLDER',
-  'COLLECT_MUSIC',
   'COLLECT_MIX',
   'SELF_MIX'
 ])
@@ -54,6 +54,11 @@ export type PushPayload = z.infer<typeof pushPayloadSchema>
 
 // 用户已登录时：先建一个固定占位 bridge 账号，再发 token；扩展首次推送 init 时用真实昵称/头像覆盖。
 export async function preIssueToken(localUserId: number): Promise<{ accountId: number; token: string }> {
+  const primary = await resolveSingleUserAccount(localUserId)
+  if (primary) {
+    const token = await issuePushToken(primary.id)
+    return { accountId: primary.id, token }
+  }
   // 用一个临时 secUid 占位（必须唯一）；扩展上线 init 后会把它换成真实 sec_uid。
   const tempSec = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const acc = await upsertAccount({
@@ -80,11 +85,14 @@ export async function handlePush(token: string, payload: PushPayload): Promise<D
 
   if (payload.type === 'init') {
     const init = payload as BridgeInitPayload & { type: 'init' }
+    const shouldPreserveProfile = acc.secUid !== init.secUid && !acc.secUid.startsWith('pending-')
     if (init.cookie) {
       const updated = await bindFromCookie({
         localUserId: acc.localUserId,
+        accountId: acc.id,
         cookie: init.cookie,
-        source: 'bridge'
+        source: 'bridge',
+        preserveProfile: shouldPreserveProfile
       })
       return toDTO(updated)
     }
@@ -95,7 +103,8 @@ export async function handlePush(token: string, payload: PushPayload): Promise<D
         secUid: init.secUid,
         nickname: init.nickname,
         avatarUrl: init.avatarUrl ?? null
-      }
+      },
+      preserveProfile: shouldPreserveProfile
     })
     return toDTO(updated)
   }

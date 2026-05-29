@@ -53,6 +53,31 @@ const musicUrl = computed(() => {
   return noteDetail.value?.music?.play_url?.url_list ?? []
 })
 
+// 视频下载地址（用于提取音频）
+const videoDownloadUrl = computed(() => {
+  const video = noteDetail.value?.video
+  if (!video) return ''
+  // 优先使用无水印下载地址
+  if (video.play_addr?.url_list?.length) {
+    return video.play_addr.url_list[0].replace('/playwm/', '/play/')
+  }
+  // 兜底：使用 bit_rate 中最高画质的地址
+  if (video.bit_rate?.length) {
+    const sorted = [...video.bit_rate].sort((a, b) => (b.bit_rate || 0) - (a.bit_rate || 0))
+    for (const br of sorted) {
+      if (br.play_addr?.url_list?.length) {
+        return br.play_addr.url_list[0].replace('/playwm/', '/play/')
+      }
+    }
+  }
+  return ''
+})
+
+// 视频时长（秒）
+const videoDurationSec = computed(() => {
+  return Math.floor((noteDetail.value?.video?.duration || 0) / 1000)
+})
+
 // 粉丝数
 const followers = computed(() => {
   return useCount(noteDetail.value?.author?.follower_count || 0)
@@ -154,6 +179,9 @@ onUnmounted(() => {
             :isShowAvatar="false"
             :showSwiperControl="false"
             :music="noteDetail.music"
+            :video-download-url="videoDownloadUrl"
+            :video-duration="videoDurationSec"
+            :author-name="noteDetail.author?.nickname || ''"
             @toggleComments="handleToggleComments"
           >
             <!-- 上下切换按钮 -->

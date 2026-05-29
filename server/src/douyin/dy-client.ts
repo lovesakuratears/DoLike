@@ -185,7 +185,7 @@ const POST_PATH = '/aweme/v1/web/aweme/post/'
 const LIKE_PATH = '/aweme/v1/web/aweme/favorite/'
 const COLLECTS_LIST_PATH = '/aweme/v1/web/collects/list/'
 const COLLECTS_VIDEO_LIST_PATH = '/aweme/v1/web/collects/video/list/'
-const COLLECT_MUSIC_PATH = '/aweme/v1/web/music/listcollection/'
+const COLLECT_MUSIC_PATH = '/aweme/v1/web/music/list/'
 const USER_MIX_PATH = '/aweme/v1/web/mix/list/'
 const USER_MIX_DETAIL_PATH = '/aweme/v1/web/mix/aweme/'
 const COLLECT_MIX_PATH = '/aweme/v1/web/mix/listcollection/'
@@ -267,10 +267,13 @@ export async function fetchUserCollectMusic(
   localUserId: number,
   account: DouyinAccount,
   params: { cursor: number; count: number }
-): Promise<DyResponse<{ status_code?: number; has_more?: boolean | number; cursor?: number; mc_list?: CollectedMusicItem[] }>> {
+): Promise<DyResponse<{ status_code?: number; has_more?: boolean | number; cursor?: number; mc_list?: CollectedMusicItem[]; music_list?: CollectedMusicItem[] }>> {
   return dyGetSigned(localUserId, account, COLLECT_MUSIC_PATH, {
     cursor: params.cursor,
-    count: params.count
+    count: params.count,
+    locate_query: 'false',
+    publish_video_strategy_type: '2',
+    source: 'channel_pc_web'
   })
 }
 

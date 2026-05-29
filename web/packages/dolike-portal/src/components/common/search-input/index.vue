@@ -7,6 +7,16 @@ import { useCurrentVideoStore } from '@/stores/current-video'
 
 const currentVideoStore = useCurrentVideoStore()
 
+const props = withDefaults(defineProps<{
+  localSearch?: boolean
+}>(), {
+  localSearch: false
+})
+
+const emit = defineEmits<{
+  (e: 'local-search', keyword: string): void
+}>()
+
 const isInputClicked = ref(false)
 const isResult = ref(false)
 const searchQuery = ref('')
@@ -133,7 +143,11 @@ const router = useRouter()
 const handleSearch = () => {
   console.log('搜索关键词：', searchQuery.value)
   if (searchQuery.value.trim() !== '') {
-    window.open(`/search/${searchQuery.value}?type=general`, '_blank')
+    if (props.localSearch) {
+      emit('local-search', searchQuery.value)
+    } else {
+      window.open(`/search/${searchQuery.value}?type=general`, '_blank')
+    }
   }
 }
 </script>

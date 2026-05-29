@@ -1,6 +1,6 @@
 # DoLike 扩展（MV3 / 桥接方案 C）
 
-> 用于把抖音网页端"我的"页面下的内容（作品 / 喜欢 / 收藏）推送到本机 DoLike 后端。  
+> 用于把抖音网页端"我的"页面下的内容（作品 / 喜欢 / 收藏 / 稍后再看 / 收藏夹视频）推送到本机 DoLike 后端。  
 > 适用场景：方案 A（CloakBrowser 扫码）/ 方案 B（手动粘贴 Cookie）都不可用时的兜底。  
 > 仅个人备份用 —— 不做内容上传、互动或对外分发。
 
@@ -147,11 +147,14 @@ extension/
 
 ## 已知限制
 
-- 插件已支持 6 种 linkKind 推送（POST/LIKE/FAVORITE/WATCH_LATER/COLLECT_FOLDER/COLLECT_MUSIC）
+- 插件当前支持 5 种 linkKind 推送（POST/LIKE/FAVORITE/WATCH_LATER/COLLECT_FOLDER）
 - 方法2 需要先访问抖音页面产生请求，否则拿到空结果
 - 方法3 需要 Chrome 以远程调试模式启动，会占用 9222 端口
 - 方法4 的解密功能依赖 `cryptography` Python 库
 - 抖音页面 DOM 变化时浮层按钮可能定位失败 —— 通过弹窗触发是更稳妥的路径
+- 收藏音乐接口已被抖音官方弃用，扩展与归档主流程已不再提供“推送收藏音乐”
+
+更多背景见 [docs/DEPRECATED_MUSIC_COLLECTION.md](../docs/DEPRECATED_MUSIC_COLLECTION.md)。
 
 ---
 

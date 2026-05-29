@@ -9,7 +9,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useLocalAuthStore } from '@/stores/local-auth'
-import { localApi } from '@/api/local'
+import { localApi, type DouyinAccountDTO } from '@/api/local'
 import LoginModal from '@/components/douyin-login/LoginModal.vue'
 
 const router = useRouter()
@@ -17,6 +17,8 @@ const auth = useLocalAuthStore()
 const loginModalOpen = ref(false)
 const douyinAvatar = ref<string>('')
 const avatarBroken = ref(false)
+const accounts = ref<DouyinAccountDTO[]>([])
+const cloakWsMap = new Map<number, WebSocket>()
 
 const loggedIn = computed(() => auth.loggedIn)
 const username = computed(() => auth.user?.username || '')
@@ -41,19 +43,88 @@ const onLogout = async () => {
 const refreshDouyinAvatar = async () => {
   if (!auth.loggedIn) {
     douyinAvatar.value = ''
+    accounts.value = []
     return
   }
   try {
     const r = await localApi.douyinAccounts()
     if (r.code === 0 && Array.isArray(r.data) && r.data.length) {
+      accounts.value = r.data
       const valid = r.data.find(a => a.isValid && a.avatarUrl) ?? r.data.find(a => a.avatarUrl)
       douyinAvatar.value = valid?.avatarUrl || ''
       avatarBroken.value = false
     } else {
+      accounts.value = []
       douyinAvatar.value = ''
     }
   } catch {
+    accounts.value = []
     douyinAvatar.value = ''
+  }
+}
+
+const primaryAccount = computed(() => {
+  return accounts.value.find(a => !a.secUid.startsWith('pending-')) ?? accounts.value[0] ?? null
+})
+
+const closeCloakWs = (accountId: number) => {
+  const ws = cloakWsMap.get(accountId)
+  if (!ws) return
+  try { ws.close() } catch { /* ignore */ }
+  cloakWsMap.delete(accountId)
+}
+
+const connectCloakWs = (sessionId: string, accountId: number) => {
+  closeCloakWs(accountId)
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const ws = new WebSocket(`${proto}//${location.host}/ws/douyin/cloak?session=${encodeURIComponent(sessionId)}`)
+
+  ws.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data)
+      const stage = data.stage
+      if (stage === 'waiting_qr') {
+        ElMessage.info('请用抖音 App 扫码确认')
+      } else if (stage === 'confirmed') {
+        ElMessage.success('扫码成功，正在刷新 Cookie…')
+      } else if (stage === 'success') {
+        ElMessage.success('扫码刷新成功，Cookie 已更新')
+        closeCloakWs(accountId)
+        void refreshDouyinAvatar()
+        window.dispatchEvent(new CustomEvent('dolike:account-bound'))
+      } else if (stage === 'failed' || stage === 'timeout') {
+        ElMessage.error(data.message || (stage === 'timeout' ? '扫码超时' : '扫码失败'))
+        closeCloakWs(accountId)
+      }
+    } catch {
+      // ignore malformed payload
+    }
+  }
+
+  ws.onerror = () => {
+    ElMessage.error('扫码连接失败，请重试')
+    closeCloakWs(accountId)
+  }
+
+  cloakWsMap.set(accountId, ws)
+}
+
+const onScanRefreshCookie = async () => {
+  const account = primaryAccount.value
+  if (!account) {
+    ElMessage.warning('请先点“绑定浏览器插件”完成首次绑定')
+    return
+  }
+  try {
+    const r = await localApi.douyinCloakImportCookie(account.id)
+    if (r.code !== 0) {
+      ElMessage.error(r.message || '启动扫码刷新失败')
+      return
+    }
+    ElMessage.success('扫码刷新已启动')
+    connectCloakWs(r.data.sessionId, account.id)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || e?.message || '启动扫码刷新失败')
   }
 }
 
@@ -73,6 +144,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('dolike:account-bound', onBoundEvent)
+  for (const accountId of cloakWsMap.keys()) closeCloakWs(accountId)
 })
 
 const showAvatarImg = computed(() => !!douyinAvatar.value && !avatarBroken.value)
@@ -105,6 +177,10 @@ const showAvatarImg = computed(() => !!douyinAvatar.value && !avatarBroken.value
             <button class="menu__item" @click="loginModalOpen = true">
               <svg-icon icon="-870" class="menu__icon" />
               <span>绑定浏览器插件</span>
+            </button>
+            <button class="menu__item" @click="onScanRefreshCookie">
+              <svg-icon icon="scan" class="menu__icon" />
+              <span>扫码刷新 Cookie</span>
             </button>
             <button class="menu__item danger" @click="onLogout">
               <svg-icon icon="logout" class="menu__icon" />

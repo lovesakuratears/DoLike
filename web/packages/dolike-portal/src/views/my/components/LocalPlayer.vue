@@ -4,6 +4,7 @@ import Player from "xgplayer";
 import PlaybackRate from "xgplayer/es/plugins/playbackRate";
 import "xgplayer/dist/index.min.css";
 import type { VideoListItem } from "@/api/local";
+import { useAudioPlayerStore } from "@/stores/audio-player";
 
 const props = defineProps<{ item: VideoListItem | null }>();
 const emit = defineEmits<{ (e: "close"): void }>();
@@ -41,6 +42,8 @@ const onKeydown = (e: KeyboardEvent) => {
   }
 };
 
+const audioPlayer = useAudioPlayerStore();
+
 const initPlayer = () => {
   if (!playerEl.value || !props.item) return;
   const url = mediaUrl(props.item);
@@ -60,6 +63,10 @@ const initPlayer = () => {
     closeVideoClick: true,
     poster: props.item.coverPath ? `/media/${props.item.coverPath}` : undefined,
     plugins: [PlaybackRate],
+  });
+  // Pause global audio player when video starts playing
+  player.on("play", () => {
+    audioPlayer.pause();
   });
 };
 

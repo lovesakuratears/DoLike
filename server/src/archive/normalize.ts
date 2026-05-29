@@ -174,7 +174,7 @@ export function normalizeVideoAweme(item: RawAwemeLike): ContentInput {
 }
 
 export function normalizeMusicItem(item: RawCollectedMusicLike): ContentInput {
-  const awemeId = String(item.id_str ?? item.id ?? '')
+  const awemeId = String(item.aweme_id ?? item.id_str ?? item.id ?? item.music_id ?? item.sec_item_id ?? '')
   const durationMs = typeof item.duration === 'number' ? item.duration : 0
   const mediaUrl = firstUrl(item.play_url?.url_list) ?? buildUriPlayUrl(item.play_url?.uri)
   const coverUrl = firstUrl(

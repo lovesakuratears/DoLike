@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { localApi } from '@/api/local'
+import { useRoute } from 'vue-router'
 import DolikeHeaderRight from '@/components/header/dolike-header-right/index.vue'
 import LogPanel from '@/components/header/log-panel/index.vue'
 import DownloadPanel from '@/components/header/download-panel/index.vue'
@@ -25,6 +26,20 @@ const loadMode = async () => {
   }
 }
 void loadMode()
+
+const route = useRoute()
+const isMyPage = computed(() => route.path.startsWith('/my'))
+const modeLabel = computed(() => {
+  if (mode.value === 'compatible') return '兼容模式'
+  return parserStatus.value === 'unconfigured' || parserStatus.value === 'unreachable'
+    ? '增强模式(降级)'
+    : '增强模式'
+})
+
+const onLocalSearch = (keyword: string) => {
+  // 触发自定义事件，my/index.vue 监听
+  window.dispatchEvent(new CustomEvent('my-local-search', { detail: keyword }))
+}
 
 const toggleMode = async () => {
   if (loadingMode.value) return
@@ -54,15 +69,15 @@ const toggleMode = async () => {
     <div class="header-main">
       <div class="header-content">
         <div class="header-left">
-          <search-input />
+          <search-input :local-search="isMyPage" @local-search="onLocalSearch" />
         </div>
         <div class="header-right">
-          <div class="header-right-item">
+          <div class="header-right-item" @click="openLog">
             <div class="header-right-item-content">
               <div class="header-right-item-overplay">
-                <svg-icon class="icon expand" icon="expand" />
+                <svg-icon class="icon" icon="logs" />
               </div>
-              <p>更多</p>
+              <p>日志</p>
             </div>
           </div>
           <div class="header-right-item" @click="openDownload">
@@ -73,31 +88,14 @@ const toggleMode = async () => {
               <p>下载</p>
             </div>
           </div>
-          <div class="header-right-item" @click="openLog">
-            <div class="header-right-item-content">
-              <div class="header-right-item-overplay">
-                <svg-icon class="icon" icon="logs" />
-              </div>
-              <p>日志</p>
-            </div>
-          </div>
           <div class="header-right-item" @click="toggleMode">
             <div class="header-right-item-content">
               <div class="header-right-item-overplay">
                 <svg-icon class="icon" icon="header-3" />
               </div>
-              <p>
-                {{
-                  mode === 'enhanced'
-                    ? (parserStatus === 'unconfigured' || parserStatus === 'unreachable' ? '增强模式(降级)' : '增强模式')
-                    : '兼容模式'
-                }}
-              </p>
+              <p>{{ modeLabel }}</p>
             </div>
           </div>
-
-          <!-- <el-divider direction="vertical" /> -->
-
           <DolikeHeaderRight />
         </div>
       </div>
@@ -219,10 +217,6 @@ const toggleMode = async () => {
           min-width: 32px;
           margin-left: 8px;
           position: relative;
-
-          &:nth-child(1) {
-            display: none;
-          }
 
           .header-right-item-content {
             display: flex;
@@ -360,8 +354,6 @@ const toggleMode = async () => {
         color: var(--color-text-t0) !important;
       }
     }
-
-    // }
   }
 
   .header.scrolled {
@@ -386,25 +378,6 @@ const toggleMode = async () => {
   }
 }
 
-@media screen and (max-width: 840px) {
-  .header {
-    .header-main {
-      .header-content {
-        .header-right {
-          .header-right-item:nth-child(1) {
-            display: flex;
-          }
-
-          .header-right-item:nth-child(2),
-          .header-right-item:nth-child(3),
-          .header-right-item:nth-child(4) {
-            display: none;
-          }
-        }
-      }
-    }
-  }
-}
 </style>
 
 <style lang="scss">

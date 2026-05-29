@@ -3,6 +3,7 @@ import { ref, computed, inject, watch, type Ref } from 'vue'
 import HoverDropdown from '@/components/common/hover-dropdown/index.vue'
 import MusicPlayer from './music-player.vue'
 import type { ICollectMusicItem } from '@/api/tyeps/request_response/userCollectMusicRes'
+import { Toast } from '@/components/ui/toast'
 import type { PlayMode } from './index.vue'
 
 // 注入播放状态管理
@@ -18,10 +19,19 @@ const musicPlayer = inject<{
 // 接收音乐数据
 const props = defineProps<{
   music: ICollectMusicItem
+  isExtracted?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'deleteExtracted', musicContentId: number): void
 }>()
 
 // 获取封面图片 URL
 const coverUrl = computed(() => {
+  if (props.isExtracted) {
+    // 提取的音频使用默认音乐图标
+    return ''
+  }
   return (
     props.music.cover_medium?.url_list?.[0] ||
     props.music.cover_thumb?.url_list?.[0] ||
@@ -31,6 +41,9 @@ const coverUrl = computed(() => {
 
 // 获取音频播放 URL
 const audioUrl = computed(() => {
+  if (props.isExtracted && props.music.play_url?.url_list?.[0]) {
+    return props.music.play_url.url_list[0]
+  }
   return props.music.play_url?.url_list?.[0] || ''
 })
 
@@ -66,6 +79,55 @@ watch(
     }
   }
 )
+
+// 下载音频（浏览器保存到本地）
+const isDownloading = ref(false)
+
+const handleDownload = async () => {
+  if (isDownloading.value) {
+    Toast.info('正在下载中...')
+    return
+  }
+
+  const url = props.music.play_url?.url_list?.[0]
+  if (!url) {
+    Toast.warning('暂无下载地址')
+    return
+  }
+
+  isDownloading.value = true
+  const fileName = `${props.music.title || 'audio'}.mp3`
+  Toast.info('正在下载...')
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('下载失败')
+
+    const blob = await response.blob()
+    if (blob.size < 1000) throw new Error('文件无效')
+
+    const blobUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = fileName
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(blobUrl)
+    Toast.success('下载成功')
+  } catch (error: any) {
+    Toast.error(error?.message || '下载失败')
+  } finally {
+    isDownloading.value = false
+  }
+}
+
+// 删除提取的音频
+const handleDelete = () => {
+  if (!props.isExtracted || !props.music.musicContentId) return
+  emit('deleteExtracted', props.music.musicContentId)
+}
 
 // 点击封面播放/暂停
 const handleCoverClick = () => {
@@ -183,8 +245,18 @@ const handleTogglePlayMode = () => {
             </div>
           </template>
           <template #content>
-            <div class="more-menu-item">去使用</div>
-            <div class="more-menu-item">取消收藏</div>
+            <div v-if="isExtracted" class="more-menu-item" @click="handleDownload">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              下载
+            </div>
+            <div v-if="isExtracted" class="more-menu-item" @click="handleDelete">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+              删除
+            </div>
+            <template v-else>
+              <div class="more-menu-item">去使用</div>
+              <div class="more-menu-item">取消收藏</div>
+            </template>
           </template>
         </HoverDropdown>
       </div>

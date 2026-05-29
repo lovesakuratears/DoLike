@@ -19,6 +19,11 @@ export default defineConfig(({ command, mode }) => {
       host: '127.0.0.1',
       port: 3002,
       // open: true,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
       proxy: {
         // 本地后端 (DoLike server)
         '/api': {
@@ -110,7 +115,8 @@ export default defineConfig(({ command, mode }) => {
             // 播放器单独打包（体积较大）
             'xgplayer': ['xgplayer'],
             'xgplayer-hls': ['xgplayer-hls'],
-            'xgplayer-flv': ['xgplayer-flv']
+            'xgplayer-flv': ['xgplayer-flv'],
+            'aplayer': ['aplayer']
           }
         }
       },

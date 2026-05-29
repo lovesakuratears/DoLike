@@ -20,7 +20,10 @@ import {
   deleteFolders,
   listFolderVideos,
   addFolderItems,
-  removeFolderItems
+  removeFolderItems,
+  extractAudioFromVideo,
+  listExtractedAudio,
+  deleteExtractedAudio
 } from './library.service.js'
 
 const contentKindEnum = z.enum(['VIDEO', 'MUSIC', 'MIX_VIDEO', 'all'])
@@ -254,6 +257,76 @@ export default async function libraryRoutes(app: FastifyInstance): Promise<void>
       const { folderId } = folderParam.parse(req.params)
       const { contentIds } = folderItemsBody.parse(req.body)
       return ok(await removeFolderItems(user.id, folderId, contentIds))
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        return reply.status(400).send(fail(ERR.VALIDATION_FAILED, e.errors[0]?.message ?? '参数错误'))
+      }
+      if (e instanceof AppError) return reply.status(e.httpStatus).send(fail(e.code, e.message))
+      throw e
+    }
+  })
+
+  app.post('/api/library/extract-audio', async (req, reply) => {
+    try {
+      const user = requireAuth(req, reply)
+      console.log('[extract-audio] body:', JSON.stringify(req.body))
+      const body = z.object({
+        awemeId: z.string().min(1),
+        videoUrl: z.string().min(1),
+        title: z.string().default(''),
+        authorName: z.string().default(''),
+        durationSec: z.coerce.number().int().default(0),
+        accountId: z.coerce.number().int().positive().optional(),
+        sourceCoverPath: z.string().nullable().optional()
+      }).parse(req.body)
+      console.log('[extract-audio] parsed:', JSON.stringify(body))
+      const result = await extractAudioFromVideo(
+        user.id,
+        body.awemeId,
+        body.videoUrl,
+        body.title,
+        body.authorName,
+        body.durationSec,
+        body.accountId,
+        body.sourceCoverPath
+      )
+      return ok(result)
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        return reply.status(400).send(fail(ERR.VALIDATION_FAILED, e.errors[0]?.message ?? '参数错误'))
+      }
+      if (e instanceof AppError) return reply.status(e.httpStatus).send(fail(e.code, e.message))
+      if (e instanceof Error) return reply.status(400).send(fail(ERR.VALIDATION_FAILED, e.message))
+      throw e
+    }
+  })
+
+  app.get('/api/library/extracted-audio', async (req, reply) => {
+    try {
+      const user = requireAuth(req, reply)
+      const q = z.object({
+        page: z.coerce.number().int().positive().optional(),
+        size: z.coerce.number().int().positive().max(100).optional()
+      }).parse(req.query)
+      const res = await listExtractedAudio(user.id, q.page, q.size)
+      return ok(res)
+    } catch (e) {
+      if (e instanceof z.ZodError) {
+        return reply.status(400).send(fail(ERR.VALIDATION_FAILED, e.errors[0]?.message ?? '参数错误'))
+      }
+      if (e instanceof AppError) return reply.status(e.httpStatus).send(fail(e.code, e.message))
+      throw e
+    }
+  })
+
+  app.post('/api/library/extracted-audio/delete', async (req, reply) => {
+    try {
+      const user = requireAuth(req, reply)
+      const body = z.object({
+        musicContentId: z.coerce.number().int().positive()
+      }).parse(req.body)
+      const res = await deleteExtractedAudio(user.id, body.musicContentId)
+      return ok(res)
     } catch (e) {
       if (e instanceof z.ZodError) {
         return reply.status(400).send(fail(ERR.VALIDATION_FAILED, e.errors[0]?.message ?? '参数错误'))

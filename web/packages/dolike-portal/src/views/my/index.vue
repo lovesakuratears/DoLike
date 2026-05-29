@@ -9,15 +9,17 @@ import LocalPlayer from './components/LocalPlayer.vue'
 import AccountsPanel from './components/AccountsPanel.vue'
 import FolderGrid from './components/FolderGrid.vue'
 import { localApi, type VideoListItem, type FolderListItem, type MixListItem, type DouyinAccountDTO } from '@/api/local'
+import { useAudioPlayerStore } from '@/stores/audio-player'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useLocalAuthStore()
+const audioPlayer = useAudioPlayerStore()
 
 type Tab = 'videos' | 'music' | 'mixes'
 const TABS: { key: Tab; label: string }[] = [
   { key: 'videos', label: '视频' },
-  { key: 'music', label: '音乐' },
+  { key: 'music', label: '音频' },
   { key: 'mixes', label: '合集' }
 ]
 
@@ -30,17 +32,23 @@ const LINK_SUBS: { key: LinkSub; label: string }[] = [
   { key: 'FOLDERS', label: '收藏夹' }
 ]
 
+const VALID_LINKS: LinkSub[] = ['POST', 'LIKE', 'FAVORITE', 'WATCH_LATER', 'FOLDERS']
+
 const queryTab = computed<Tab>(() => {
   const t = String(route.query.tab || '')
   if (['music', 'mixes'].includes(t)) return t as Tab
   return 'videos'
 })
 const activeTab = ref<Tab>(queryTab.value)
-const activeLink = ref<LinkSub>('LIKE')
+const activeLink = ref<LinkSub>(
+  VALID_LINKS.includes(route.query.link as LinkSub) ? (route.query.link as LinkSub) : 'LIKE'
+)
 
 const selectTab = (t: Tab) => {
   activeTab.value = t
-  router.replace({ query: { ...route.query, tab: t } })
+  const q: Record<string, string> = { tab: t }
+  if (t === 'videos' && activeLink.value) q.link = activeLink.value
+  router.replace({ query: q })
   if (t !== 'videos') activeFolder.value = null
   if (t !== 'mixes') activeMix.value = null
   if (t === 'mixes') void refreshMixes()
@@ -50,11 +58,14 @@ type Duration = 'short' | 'long'
 const duration = ref<Duration | null>(null)
 const keyword = ref("")
 
+
 const accountsRef = ref<InstanceType<typeof AccountsPanel> | null>(null)
 const videoGridRef = ref<InstanceType<typeof VideoGrid> | null>(null)
+const folderVideoGridRef = ref<InstanceType<typeof VideoGrid> | null>(null)
 const folderGridRef = ref<InstanceType<typeof FolderGrid> | null>(null)
 const musicShelfRef = ref<InstanceType<typeof MusicShelf> | null>(null)
 const playing = ref<VideoListItem | null>(null)
+
 const activeFolder = ref<FolderListItem | null>(null)
 const mixes = ref<MixListItem[]>([])
 const mixesLoading = ref(false)
@@ -67,7 +78,28 @@ const pageArchiving = ref(false)
 const archiveMode = ref<'full' | 'incremental' | null>(null)
 
 const onPlay = (item: VideoListItem) => {
-  router.push({ name: 'local-video', params: { id: String(item.id) } })
+  // 音频类型：使用全局 APlayer，不跳转视频页
+  if (item.mediaPath?.toLowerCase().endsWith('.mp3') || activeTab.value === 'music') {
+    const shelfItems = musicShelfRef.value?.items || []
+    const trackList = (shelfItems.length > 0 ? shelfItems : [item]).map((t: VideoListItem) => ({
+      id: t.id,
+      title: t.title || '未知音频',
+      authorName: t.authorName || '未知作者',
+      mediaPath: t.mediaPath || '',
+      coverPath: t.coverPath,
+      durationSec: t.durationSec || 0,
+    }))
+    const currentTrack = trackList.find((t) => t.id === item.id) || trackList[0]
+    audioPlayer.playTrack(currentTrack, trackList)
+    return
+  }
+  // 视频类型：暂停音频并跳转视频详情页
+  audioPlayer.pause()
+  router.push({
+    name: 'local-video',
+    params: { id: String(item.id) },
+    query: { fromLink: activeLink.value, fromTab: activeTab.value }
+  })
 }
 const onClosePlayer = () => {
   playing.value = null
@@ -76,6 +108,106 @@ const onClosePlayer = () => {
 const onSearch = () => {
   videoGridRef.value?.refresh()
   musicShelfRef.value?.refresh()
+}
+
+// 提取音频（视频标签下）
+const onExtractAudio = async (ids: number[]) => {
+  console.log('[onExtractAudio] called, ids:', ids, 'length:', ids.length)
+  if (ids.length === 0) {
+    console.warn('[onExtractAudio] empty ids, return')
+    return
+  }
+  ElMessage.info('正在提取音频...')
+  let successCount = 0
+  let skipCount = 0
+  try {
+    for (const id of ids) {
+      // 从 VideoGrid 实例中查找 item（优先用活跃的 ref，找不到时尝试另一个）
+      const item = videoGridRef.value?.items?.find((it: any) => it.id === id)
+        ?? folderVideoGridRef.value?.items?.find((it: any) => it.id === id)
+      if (!item) {
+        console.warn('[onExtractAudio] item not found for id:', id)
+        continue
+      }
+
+      // 必须有本地视频文件才能提取
+      if (!item.mediaPath) {
+        console.warn('[extractAudio] skip: no mediaPath', item.awemeId, item.title)
+        skipCount++
+        continue
+      }
+
+      const videoUrl = '/media/' + item.mediaPath
+      const reqBody = {
+        awemeId: item.awemeId,
+        videoUrl,
+        title: item.title || '未知视频',
+        authorName: item.authorName || '',
+        durationSec: item.durationSec || 0,
+        sourceCoverPath: item.coverPath || null
+      }
+      console.log('[extractAudio] request body:', JSON.stringify(reqBody))
+
+      const r = await localApi.extractAudio(reqBody)
+      console.log('[extractAudio] response:', r)
+      if (r.code === 0) {
+        successCount++
+      } else {
+        console.error('[extractAudio] fail:', r.message)
+        ElMessage.warning(`「${item.title}」提取失败：${r.message}`)
+      }
+    }
+    if (successCount > 0) {
+      ElMessage.success(`已提取 ${successCount} 个音频，可在"音频"标签查看`)
+    }
+    if (skipCount > 0) {
+      ElMessage.warning(`${skipCount} 个视频尚未下载完成，跳过`)
+    }
+    if (successCount === 0 && skipCount === 0) {
+      ElMessage.error('提取失败，请查看控制台日志')
+    }
+  } catch (e: any) {
+    console.error('[extractAudio] error:', e)
+    const backendMsg = e?.response?.data?.message
+    ElMessage.error(backendMsg || e?.message || '提取失败，请查看控制台日志')
+  }
+}
+
+const onDownload = async (ids: number[]) => {
+  if (ids.length === 0) return
+  let successCount = 0
+  for (const id of ids) {
+    const item = videoGridRef.value?.items?.find((it: any) => it.id === id)
+      ?? folderVideoGridRef.value?.items?.find((it: any) => it.id === id)
+    if (!item) continue
+    if (!item.mediaPath) {
+      ElMessage.warning(`「${item.title}」尚未下载完成，跳过`)
+      continue
+    }
+    try {
+      const url = '/media/' + item.mediaPath
+      const response = await fetch(url)
+      if (!response.ok) throw new Error('下载失败')
+      const blob = await response.blob()
+      if (blob.size < 1000) throw new Error('文件无效')
+      const blobUrl = window.URL.createObjectURL(blob)
+      const ext = item.mediaPath.toLowerCase().endsWith('.mp3') ? '.mp3' : '.mp4'
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = (item.title || 'video') + ext
+      link.style.display = 'none'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(blobUrl)
+      successCount++
+    } catch (e: any) {
+      ElMessage.error(`「${item.title}」下载失败：${e?.message || ''}`)
+    }
+  }
+  if (successCount > 0) {
+    ElMessage.success(`已下载 ${successCount} 个文件`)
+  }
 }
 
 const onBound = () => {
@@ -122,16 +254,31 @@ const refreshMixes = async () => {
 
 onMounted(() => {
   window.addEventListener('dolike:account-bound', onBound)
+  window.addEventListener('my-local-search', onGlobalSearch as any)
   if (activeTab.value === 'mixes') void refreshMixes()
   void loadAccounts()
+
 })
+
+const onGlobalSearch = (e: any) => {
+  keyword.value = e.detail || ''
+  onSearch()
+}
 onBeforeUnmount(() => {
   window.removeEventListener('dolike:account-bound', onBound)
+  window.removeEventListener('my-local-search', onGlobalSearch as any)
 })
 
 watch(queryTab, (next) => {
   activeTab.value = next
   if (next === 'mixes') void refreshMixes()
+})
+
+// 当 activeLink 变化时，同步到 URL（仅视频 tab）
+watch(activeLink, (next) => {
+  if (activeTab.value === 'videos') {
+    router.replace({ query: { ...route.query, tab: activeTab.value, link: next } })
+  }
 })
 
 // ★ 加载账号列表（用于页面级归档按钮）
@@ -217,19 +364,6 @@ document.title = '都喜欢-DoLike'
       </button>
     </nav>
 
-    <div class="global-search">
-      <div class="global-search-input">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <input
-          v-model="keyword"
-          type="text"
-          placeholder="搜索标题、描述、作者…"
-          @keyup.enter="onSearch"
-        />
-        <button v-if="keyword" class="search-clear" type="button" @click="keyword = ''; onSearch()">✕</button>
-      </div>
-    </div>
-
     <main class="my-content">
       <div v-if="activeTab === 'videos'">
         <div class="videos-toolbar">
@@ -276,11 +410,13 @@ document.title = '都喜欢-DoLike'
           />
           <VideoGrid
             v-else
-            ref="videoGridRef"
+            ref="folderVideoGridRef"
             :folder-id="activeFolder.id"
             :keyword="keyword || undefined"
             @play="onPlay"
             @folders-changed="onFoldersChanged"
+            @extract-audio="onExtractAudio"
+            @download="onDownload"
           />
         </template>
         <VideoGrid
@@ -289,8 +425,11 @@ document.title = '都喜欢-DoLike'
           content-kind="VIDEO"
           :link-kind="activeLink"
           :length="duration"
+          :keyword="keyword || undefined"
           @play="onPlay"
           @folders-changed="onFoldersChanged"
+          @extract-audio="onExtractAudio"
+          @download="onDownload"
         />
       </div>
       <div v-else-if="activeTab === 'music'">
@@ -320,6 +459,7 @@ document.title = '都喜欢-DoLike'
     </main>
 
     <LocalPlayer :item="playing" @close="onClosePlayer" />
+
   </div>
 </template>
 
@@ -350,7 +490,7 @@ document.title = '都喜欢-DoLike'
 
   .my-header {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
     gap: 16px;
     margin-bottom: 20px;
@@ -370,7 +510,9 @@ document.title = '都喜欢-DoLike'
       letter-spacing: -0.02em;
       margin: 0;
     }
+
   }
+
 
   .accounts-section {
     margin-bottom: 20px;
@@ -469,60 +611,6 @@ document.title = '都喜欢-DoLike'
     }
   }
 
-  .global-search {
-    margin-bottom: 16px;
-    padding: 14px 16px;
-    border: 1px solid var(--color-line-l3, #eee);
-    border-radius: 18px;
-    background: rgba(var(--white), 0.9);
-
-    .global-search-input {
-      position: relative;
-      display: flex;
-      align-items: center;
-
-      .search-icon {
-        position: absolute;
-        left: 14px;
-        color: var(--color-text-t3, #888);
-        pointer-events: none;
-      }
-
-      input {
-        width: 100%;
-        padding: 10px 36px 10px 38px;
-        border-radius: 999px;
-        border: 1px solid var(--color-line-l3, #ddd);
-        background: rgba(var(--white), 0.8);
-        font-size: 14px;
-        color: var(--color-text-t1);
-        outline: none;
-        transition: border-color 0.2s;
-
-        &:focus {
-          border-color: rgba(var(--primary-500), 0.4);
-          box-shadow: 0 0 0 3px rgba(var(--primary-500), 0.08);
-        }
-      }
-
-      .search-clear {
-        position: absolute;
-        right: 10px;
-        border: none;
-        background: transparent;
-        color: var(--color-text-t3, #888);
-        cursor: pointer;
-        font-size: 16px;
-        padding: 2px 6px;
-        border-radius: 50%;
-
-        &:hover {
-          color: var(--color-text-t1);
-          background: rgba(var(--neutral-100), 0.8);
-        }
-      }
-    }
-  }
 
   .duration-filter {
     flex-shrink: 0;

@@ -193,6 +193,14 @@ export const localApi = {
       .post<ApiResp<{ ok: boolean }>>(`/douyin/accounts/${id}/bridge/revoke`)
       .then((r) => r.data),
 
+  // ★ CloakBrowser 导入插件 Cookie —— 用已有 cookie 启动扫码
+  douyinCloakImportCookie: (id: number) =>
+    http
+      .post<ApiResp<{ sessionId: string; wsPath: string }>>(
+        `/douyin/accounts/${id}/cloak/import-cookie`
+      )
+      .then((r) => r.data),
+
 
   // ★ Cookie 校验 —— 测试 cookie 是否有效（不绑定账号）
   // 标记: COOKIE_VALIDATE_API
@@ -287,6 +295,19 @@ export const localApi = {
       .then((r) => r.data)
   ,
 
+  // 删除提取的音频（专用端点，同时清理本地文件）
+  deleteExtractedAudio: (musicContentId: number) =>
+    http
+      .post<ApiResp<{ deleted: boolean }>>('/library/extracted-audio/delete', {
+        musicContentId
+      })
+      .then((r) => r.data),
+
+  listExtractedAudio: (page = 1, size = 20) =>
+    http
+      .get<ApiResp<VideoListResult>>('/library/extracted-audio', { params: { page, size } })
+      .then((r) => r.data),
+
   listFolders: () =>
     http.get<ApiResp<FolderListItem[]>>('/library/folders').then((r) => r.data),
 
@@ -308,7 +329,39 @@ export const localApi = {
     http.post<ApiResp<{ added: number }>>(`/library/folders/${folderId}/items`, { contentIds }).then((r) => r.data),
 
   removeFolderItems: (folderId: number, contentIds: number[]) =>
-    http.delete<ApiResp<{ removed: number }>>(`/library/folders/${folderId}/items`, { data: { contentIds } }).then((r) => r.data)
+    http.delete<ApiResp<{ removed: number }>>(`/library/folders/${folderId}/items`, { data: { contentIds } }).then((r) => r.data),
+
+  // ★ 分享链接解析 —— 使用插件 Cookie 获取下载链接
+  // 标记: SHARE_LINK_RESOLVE_API
+  resolveShareLink: (shareUrl: string, accountId: number) =>
+    http.post<ApiResp<{
+      video_url: string
+      strategy: string
+      awemeId?: string
+      title?: string
+      authorName?: string
+      duration?: number
+      coverUrl?: string
+      source?: string
+    }>>('/parser/resolve-share', { shareUrl, accountId }).then((r) => r.data),
+
+  // ★ 从视频提取音频
+  // 标记: EXTRACT_AUDIO_API
+  extractAudio: (params: {
+    awemeId: string
+    videoUrl: string
+    title?: string
+    authorName?: string
+    durationSec?: number
+    accountId?: number
+    sourceCoverPath?: string | null
+  }) =>
+    http
+      .post<ApiResp<{ musicContentId: number; title: string; mediaPath: string; coverPath: string | null }>>(
+        '/library/extract-audio',
+        params
+      )
+      .then((r) => r.data),
 }
 
 export default http

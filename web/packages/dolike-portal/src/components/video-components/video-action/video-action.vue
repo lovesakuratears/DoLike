@@ -8,6 +8,9 @@ import CollectionFolderDialog from './collection-folder-dialog.vue'
 import type { IMusic } from '@/api/tyeps/common/music'
 import type { IShareInfo } from '@/api/tyeps/common/aweme'
 import type { BitRate } from '@/api/tyeps/common/video'
+import apis from '@/api/apis'
+import { localApi } from '@/api/local'
+import { Toast } from '@/components/ui/toast'
 
 const props = defineProps({
   aweme_id: String,
@@ -51,6 +54,21 @@ const props = defineProps({
   },
   // 视频描述（用于下载文件名）
   videoDesc: {
+    type: String,
+    default: ''
+  },
+  // 视频下载地址（用于提取音频）
+  videoDownloadUrl: {
+    type: String,
+    default: ''
+  },
+  // 视频时长（秒）
+  videoDuration: {
+    type: Number,
+    default: 0
+  },
+  // 作者名
+  authorName: {
     type: String,
     default: ''
   }
@@ -213,6 +231,44 @@ const handleSearchBlur = () => {
   isSearchFocused.value = false
 }
 
+// 提取音频状态
+const isExtractingMusic = ref(false)
+
+// 提取视频原声/BGM
+const handleExtractMusic = async () => {
+  if (isExtractingMusic.value) {
+    Toast.info('正在提取中...')
+    return
+  }
+
+  if (!props.videoDownloadUrl) {
+    Toast.warning('暂无可提取的视频源')
+    return
+  }
+
+  isExtractingMusic.value = true
+  Toast.info('正在提取音频...')
+
+  try {
+    const r = await localApi.extractAudio({
+      awemeId: props.aweme_id || '',
+      videoUrl: props.videoDownloadUrl,
+      title: props.videoDesc || props.aweme_id || '未知视频',
+      authorName: props.authorName || '',
+      durationSec: props.videoDuration || 0
+    })
+    if (r.code !== 0) {
+      throw new Error(r.message || '提取失败')
+    }
+    Toast.success('音频提取成功！可在"收藏-音频"中查看')
+  } catch (error: any) {
+    console.error('提取音频失败:', error)
+    Toast.error(error?.message || '音频提取失败，请重试')
+  } finally {
+    isExtractingMusic.value = false
+  }
+}
+
 //根据父容器宽高，计算scale的值
 const scale = ref(1)
 //监听父容器的宽高变化
@@ -354,6 +410,18 @@ onUnmounted(() => {
       </div>
       <div
         class="video-action-item"
+        @click="handleExtractMusic"
+      >
+        <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="6" cy="18" r="3" fill="currentColor"/>
+          <circle cx="18" cy="16" r="3" fill="currentColor"/>
+        </svg>
+        <span class="num">提取音频</span>
+      </div>
+
+      <div
+        class="video-action-item"
         @mouseenter="handleShareEnter"
         @mouseleave="handleShareLeave"
       >
@@ -391,7 +459,6 @@ onUnmounted(() => {
           class="more-box-wrapper"
           :style="{ width: `${width}px` }"
           :is-attent="isAttent"
-          :music-id="props.music?.id_str || props.music?.mid || String(props.music?.id || '')"
           :aweme-id="props.aweme_id"
           :user-id="props.user_id"
           @cancel-follow="handleAttention"

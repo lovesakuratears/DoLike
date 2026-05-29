@@ -3,6 +3,15 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { localApi, type DouyinAccountDTO } from '@/api/local'
 
+// ★ CloakBrowser 扫码 WS 连接管理
+// 标记: CLOAK_WS_MANAGER
+interface CloakWsHandle {
+  sessionId: string
+  ws: WebSocket
+  accountId: number
+}
+const cloakWsMap = new Map<number, CloakWsHandle>()
+
 const accounts = ref<DouyinAccountDTO[]>([])
 const loading = ref(false)
 
@@ -22,12 +31,9 @@ const refresh = async () => {
   try {
     const r = await localApi.douyinAccounts()
     if (r.code === 0) {
-      accounts.value = [...r.data].sort((a, b) => {
-        const aPending = a.secUid.startsWith('pending-') || a.secUid === 'self'
-        const bPending = b.secUid.startsWith('pending-') || b.secUid === 'self'
-        if (aPending !== bPending) return aPending ? 1 : -1
-        return a.id - b.id
-      })
+      accounts.value = [...r.data]
+        .filter((a) => !a.secUid.startsWith('pending-') && a.secUid !== 'self')
+        .sort((a, b) => a.id - b.id)
     }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || e?.message || '加载失败')
@@ -121,6 +127,63 @@ const removeAcc = async (acc: DouyinAccountDTO) => {
   } catch (e: any) { ElMessage.error(e?.response?.data?.message || e?.message || '请求失败') }
 }
 
+// ★ CloakBrowser 导入 Cookie 扫码 —— 用插件 cookie 启动扫码流程
+// 标记: CLOAK_IMPORT_COOKIE_FRONTEND
+const cloakImportCookie = async (acc: DouyinAccountDTO) => {
+  try {
+    const r = await localApi.douyinCloakImportCookie(acc.id)
+    if (r.code === 0) {
+      const { sessionId, wsPath } = r.data
+      ElMessage.success('扫码已启动，请在弹出的浏览器窗口中确认')
+      connectCloakWs(sessionId, acc.id)
+    } else {
+      ElMessage.error(r.message || '启动失败')
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || e?.message || '启动失败')
+  }
+}
+
+// ★ 连接 CloakBrowser WS —— 监听扫码进度
+// 标记: CLOAK_WS_CONNECT
+function connectCloakWs(sessionId: string, accountId: number) {
+  // 关闭旧连接
+  const old = cloakWsMap.get(accountId)
+  if (old) { try { old.ws.close() } catch { /* ignore */ } }
+
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${proto}//${location.host}/ws/douyin/cloak?session=${sessionId}`
+  const ws = new WebSocket(wsUrl)
+
+  ws.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data)
+      const stage = data.stage
+      if (stage === 'waiting_qr') {
+        ElMessage.info('请用抖音 App 扫码确认')
+      } else if (stage === 'confirmed') {
+        ElMessage.success('扫码成功，正在保存账号…')
+      } else if (stage === 'success') {
+        ElMessage.success(`账号已更新：${data.accountId ? 'Cookie 已刷新' : '完成'}`)
+        ws.close()
+        cloakWsMap.delete(accountId)
+        refresh()
+      } else if (stage === 'failed' || stage === 'timeout') {
+        ElMessage.error(`扫码${stage === 'timeout' ? '超时' : '失败'}：${data.message || ''}`)
+        ws.close()
+        cloakWsMap.delete(accountId)
+      }
+    } catch { /* ignore parse error */ }
+  }
+
+  ws.onerror = () => {
+    ElMessage.error('扫码连接失败')
+    cloakWsMap.delete(accountId)
+  }
+
+  cloakWsMap.set(accountId, { sessionId, ws, accountId })
+}
+
 onMounted(() => {
   window.addEventListener('dolike:account-bound', onBound)
   startPolling()
@@ -129,6 +192,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('dolike:account-bound', onBound)
   if (pollTimer) clearInterval(pollTimer)
+  // 关闭所有 CloakBrowser WS
+  for (const [, h] of cloakWsMap) { try { h.ws.close() } catch { /* ignore */ } }
+  cloakWsMap.clear()
 })
 
 const onBound = () => { refresh() }
@@ -155,7 +221,7 @@ defineExpose({ refresh })
             <span v-if="a.secUid.startsWith('pending-')" class="status-badge danger">待绑定</span>
             <span v-else-if="archiveStatuses[a.id] === 'running'" class="status-badge running">归档中</span>
             <span v-else-if="archiveStatuses[a.id] === 'paused'" class="status-badge paused">已暂停</span>
-            <span v-else-if="!a.isValid" class="status-badge danger">Cookie 失效</span>
+            <span v-else-if="!a.isValid" class="status-badge danger">未验证</span>
           </p>
           <p class="meta">
             <span class="meta-badge">{{ a.cookieSource === 'bridge' ? '插件' : a.cookieSource === 'manual' ? '手动' : '扫码' }}</span>
@@ -179,6 +245,15 @@ defineExpose({ refresh })
 
           <!-- 删除 -->
           <button class="op-btn danger" @click="removeAcc(a)">删除</button>
+
+          <!-- ★ 插件 Cookie 操作 -->
+          <!-- 标记: PLUGIN_COOKIE_OPS -->
+          <button
+            v-if="a.cookieEnc"
+            class="op-btn"
+            @click="cloakImportCookie(a)"
+            title="用已有 Cookie 走扫码路线刷新并确认身份"
+          >扫码刷新</button>
         </div>
       </li>
     </ul>

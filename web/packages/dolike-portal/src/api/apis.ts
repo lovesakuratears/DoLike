@@ -668,5 +668,61 @@ export default {
     return request.get(urls.qrcode_info, {
       params
     })
-  }
+  },
+
+  /**
+   * @description 从视频中提取音频（原声/BGM）并保存为 MP3
+   * @param {string} awemeId 视频 awemeId
+   * @param {string} videoUrl 视频下载地址
+   * @param {string} title 视频标题
+   * @param {string} authorName 作者名称
+   * @param {number} durationSec 视频时长（秒）
+   * @param {number} accountId 账号ID（可选）
+   * @return {Promise<{ musicContentId: number; title: string; mediaPath: string }>} 提取结果
+   */
+  extractAudio: (params: {
+    awemeId: string
+    videoUrl: string
+    title?: string
+    authorName?: string
+    durationSec?: number
+    accountId?: number
+  }): Promise<{ musicContentId: number; title: string; mediaPath: string }> => {
+    return request.post('/library/extract-audio', params)
+  },
+
+  /**
+   * @description 获取本地提取的音频列表
+   * @param {number} page 页码
+   * @param {number} size 每页数量
+   */
+  getExtractedAudio: (page: number = 1, size: number = 20): Promise<{
+    total: number
+    page: number
+    size: number
+    items: Array<{
+      id: number
+      awemeId: string
+      title: string
+      authorName: string
+      durationSec: number
+      publishAt: string
+      archivedAt: string
+      coverPath: string | null
+      mediaPath: string | null
+      status: string
+      douyinAccountId: number
+      linkKinds: string[]
+    }>
+  }> => {
+    return request.get('/library/extracted-audio', { params: { page, size } })
+  },
+
+  /**
+   * @description 删除提取的音频
+   * @param {number} musicContentId 音频 Content ID
+   */
+  deleteExtractedAudio: (musicContentId: number): Promise<{ deleted: boolean }> => {
+    return request.post('/library/extracted-audio/delete', { musicContentId })
+  },
 }

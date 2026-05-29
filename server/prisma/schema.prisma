@@ -180,3 +180,23 @@ model DownloadTask {
 
   @@index([status])
 }
+
+// ============================ 提取音频（完全解耦，不关联抖音账号） ============================
+
+model ExtractedAudio {
+  id             Int       @id @default(autoincrement())
+  localUserId    Int
+  sourceAwemeId  String    // 来源视频 awemeId
+  title          String
+  authorName     String
+  durationSec    Int
+  mediaPath      String    // 相对 archiveRoot/extracted-audio/ 的路径
+  coverPath      String?
+  mediaSize      BigInt?
+  createdAt      DateTime  @default(now())
+  hidden         Boolean   @default(false)
+  hiddenAt       DateTime?
+
+  @@index([localUserId])
+  @@index([sourceAwemeId])
+}

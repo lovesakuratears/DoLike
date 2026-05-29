@@ -14,7 +14,6 @@ import { getLogger } from '../core/logger.js'
 import { hasUserKey } from '../core/keystore.js'
 import {
   paginateUserCollectVideo,
-  paginateUserCollectMusic,
   paginateUserCollectMixVideos,
   paginateUserLike,
   paginateUserPost,
@@ -194,7 +193,7 @@ async function runFetcher(
         await ingestOne(ctx, item, linkKind, {
           folderId: meta.__folderId ?? null,
           mixId: meta.__mixId ?? null,
-          mode: linkKind === 'COLLECT_MUSIC' ? 'music' : 'video'
+          mode: 'video'
         })
         if (total % 20 === 0) log.info({ total, failed }, 'fetcher progress')
         void beforeNew
@@ -274,7 +273,7 @@ export async function runArchive(
   localUserId: number,
   accountId: number,
   opts: { full: boolean; onProgress?: ProgressHook }
-): Promise<{ post: number; like: number; collectVideo: number; collectMusic: number; selfMix: number; collectMix: number }> {
+): Promise<{ post: number; like: number; collectVideo: number; selfMix: number; collectMix: number }> {
   const log = getLogger().child({ mod: 'archive', accountId, full: opts.full })
   // 同一账号同时只允许一个 run；如果已有 running/paused 直接拒。
   const existing = runs.get(accountId)
@@ -317,23 +316,21 @@ export async function runArchive(
       ...selfMixes.map((mix) => upsertMix(ctx, 'self', mix.raw)),
       ...collectedMixes.map((mix) => upsertMix(ctx, 'collected', mix.raw))
     ])
-    log.info('archive: launching 6 fetchers (POST/LIKE/FAVORITE/COLLECT_MUSIC/SELF_MIX/COLLECT_MIX)')
-    const [post, like, collectVideo, collectMusic, selfMix, collectMix] = await Promise.allSettled([
+    log.info('archive: launching 5 fetchers (POST/LIKE/FAVORITE/SELF_MIX/COLLECT_MIX)')
+    const [post, like, collectVideo, selfMix, collectMix] = await Promise.allSettled([
       runFetcher(ctx, 'POST', paginateUserPost(fetcherOpts)),
       runFetcher(ctx, 'LIKE', paginateUserLike(fetcherOpts)),
       runFetcher(ctx, 'FAVORITE', paginateUserCollectVideo(fetcherOpts)),
-      runFetcher(ctx, 'COLLECT_MUSIC', paginateUserCollectMusic(fetcherOpts) as AsyncGenerator<RawAwemeLike>),
       runFetcher(ctx, 'SELF_MIX', paginateUserSelfMixVideos(fetcherOpts)),
       runFetcher(ctx, 'COLLECT_MIX', paginateUserCollectMixVideos(fetcherOpts))
     ])
-    for (const [kind, r] of [['POST', post], ['LIKE', like], ['FAVORITE', collectVideo], ['COLLECT_MUSIC', collectMusic], ['SELF_MIX', selfMix], ['COLLECT_MIX', collectMix]] as const) {
+    for (const [kind, r] of [['POST', post], ['LIKE', like], ['FAVORITE', collectVideo], ['SELF_MIX', selfMix], ['COLLECT_MIX', collectMix]] as const) {
       if (r.status === 'rejected') log.error({ kind, err: r.reason }, 'fetcher promise rejected')
     }
     const summary = {
       post: post.status === 'fulfilled' ? post.value.total : 0,
       like: like.status === 'fulfilled' ? like.value.total : 0,
       collectVideo: collectVideo.status === 'fulfilled' ? collectVideo.value.total : 0,
-      collectMusic: collectMusic.status === 'fulfilled' ? collectMusic.value.total : 0,
       selfMix: selfMix.status === 'fulfilled' ? selfMix.value.total : 0,
       collectMix: collectMix.status === 'fulfilled' ? collectMix.value.total : 0
     }
@@ -386,13 +383,13 @@ export async function ingestExternalItems(opts: {
   let failed = 0
   const prisma = getPrisma()
   const log = getLogger().child({ mod: 'archive', linkKind: opts.linkKind })
-  log.info({ totalItems: opts.items.length, sampleKeys: opts.items[0] ? Object.keys(opts.items[0]) : [] }, 'ingestExternalItems: start')
+  log.info({ totalItems: opts.items.length, sampleKeys: opts.items[0] ? Object.keys(opts.items[0]) : [], sampleItem: opts.items[0] ? JSON.stringify(opts.items[0]).slice(0, 500) : '' }, 'ingestExternalItems: start')
   let skippedNoId = 0
   for (const raw of opts.items) {
     const meta = raw as RawAwemeLike & { __folderId?: string; __mixId?: string }
     const isMusic = opts.linkKind === 'COLLECT_MUSIC'
     const rawAwemeId = isMusic
-      ? String((raw as Record<string, unknown>).id_str ?? (raw as Record<string, unknown>).id ?? '')
+      ? String((raw as Record<string, unknown>).aweme_id ?? (raw as Record<string, unknown>).id_str ?? (raw as Record<string, unknown>).id ?? (raw as Record<string, unknown>).music_id ?? (raw as Record<string, unknown>).sec_item_id ?? '')
       : String(raw.aweme_id ?? '')
     if (!rawAwemeId) {
       skippedNoId++

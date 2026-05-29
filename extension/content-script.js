@@ -33,11 +33,26 @@ function ensureFab() {
 }
 
 function sendAction(payload, successText) {
+  if (!chrome?.runtime?.id || typeof chrome.runtime.sendMessage !== 'function') {
+    flash('扩展上下文已失效，请重新加载 DoLike 扩展', '#d24a52')
+    return
+  }
+  console.log('[DoList] sendAction:', payload.type, payload.linkKind || '')
+  flash('处理中…', '#444')
   chrome.runtime.sendMessage(payload, resp => {
+    if (chrome.runtime.lastError) {
+      flash(`扩展通信失败：${chrome.runtime.lastError.message}`, '#d24a52')
+      return
+    }
     if (resp?.ok) {
       if (payload.type === 'init') {
         const nickname = resp?.data?.profile?.nickname || resp?.data?.dto?.nickname || '抖音用户'
         flash(`绑定成功：${nickname}`, '#22a06b')
+        return
+      }
+      if (payload.type === 'pushCookie') {
+        const nickname = resp?.data?.dto?.nickname || resp?.data?.profile?.nickname || '抖音用户'
+        flash(`Cookie 已推送：${nickname}`, '#22a06b')
         return
       }
       flash(`${successText} ${resp.data?.pushed ?? 0} 条`, '#22a06b')
@@ -70,12 +85,12 @@ function toggleMenu(btn) {
 
   const actions = [
     ['绑定插件', () => sendAction({ type: 'init' }, '绑定完成')],
+    ['推送 Cookie', () => sendAction({ type: 'pushCookie' }, 'Cookie 已推送')],
     ['推送作品', () => sendAction({ type: 'push', linkKind: 'POST' }, '已推送作品')],
     ['推送喜欢', () => sendAction({ type: 'push', linkKind: 'LIKE' }, '已推送喜欢')],
     ['推送收藏', () => sendAction({ type: 'push', linkKind: 'FAVORITE' }, '已推送收藏')],
     ['推送稍后再看', () => sendAction({ type: 'push', linkKind: 'WATCH_LATER' }, '已推送稍后再看')],
-    ['推送收藏夹视频', () => sendAction({ type: 'push', linkKind: 'COLLECT_FOLDER' }, '已推送收藏夹视频')],
-    ['推送收藏音乐', () => sendAction({ type: 'push', linkKind: 'COLLECT_MUSIC' }, '已推送收藏音乐')]
+    ['推送收藏夹视频', () => sendAction({ type: 'push', linkKind: 'COLLECT_FOLDER' }, '已推送收藏夹视频')]
   ]
 
   for (const [text, handler] of actions) {

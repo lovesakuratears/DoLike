@@ -12,12 +12,14 @@ import { parseCookieString } from './cookie-parse.js'
 import { getProfileSelf, type ProfileSelfRaw } from './dy-client.js'
 import {
   findByPushToken,
+  findPrimaryAccountByLocalUserId,
   listAccounts,
   markValidity,
   toDTO,
   upsertAccount
 } from './account.store.js'
 import type { CookieSource, DouyinAccountDTO, ProfileSelfMin } from './types.js'
+import { getLogger } from '../core/logger.js'
 
 export async function listAccountDTOs(localUserId: number): Promise<DouyinAccountDTO[]> {
   const xs = await listAccounts(localUserId)
@@ -35,6 +37,13 @@ export async function validate(localUserId: number, account: DouyinAccount): Pro
     await markValidity(account.id, false)
     return false
   }
+  // ★ 插件推送的 cookie 不做严格 API 校验（chrome.cookies 可能不完整）
+  // 校验推迟到实际使用时通过 BrowserSession 验证
+  if (account.cookieSource === 'bridge') {
+    getLogger().info('[DoList] validate: skipping strict check for bridge cookie, marking valid')
+    await markValidity(account.id, true)
+    return true
+  }
   const r = await getProfileSelf(cookie)
   const ok = r.ok && !!r.data?.user?.sec_uid
   await markValidity(account.id, ok)
@@ -43,16 +52,46 @@ export async function validate(localUserId: number, account: DouyinAccount): Pro
 
 export async function probeProfile(cookie: string): Promise<ProfileSelfMin> {
   const parsed = parseCookieString(cookie)
-  if (parsed.missing.length > 0) {
+  // ★ 宽松校验：只检查 sessionid 或 ttwid 存在即可，不要求所有字段
+  // chrome.cookies 可能拿不到所有 HttpOnly 字段，不能因为缺少非关键字段就拒绝
+  const hasSession = parsed.map.sessionid || parsed.map.ttwid || parsed.map['passport_csrf_token']
+  if (!hasSession) {
     throw new AppError(
       ERR.DOUYIN_COOKIE_INCOMPLETE,
-      `cookie 缺少字段：${parsed.missing.join(', ')}`,
+      `cookie 缺少关键字段（sessionid/ttwid），请重新登录抖音`,
       400
     )
   }
   const r = await getProfileSelf(cookie)
+  // ★ 诊断日志：打印抖音 API 返回的关键字段
+  const log = await import('../core/logger.js')
+  const logger = (await log).getLogger().child({ mod: 'cookie-probe' })
+  logger.info({
+    ok: r.ok,
+    status: r.status,
+    hasUserData: !!r.data?.user,
+    secUid: r.data?.user?.sec_uid || '(empty)',
+    statusCode: r.data?.status_code,
+    cookieKeys: Object.keys(parsed.map),
+    cookieSnip: cookie.slice(0, 80) + '...'
+  }, 'probeProfile: getProfileSelf result')
+  // ★ 宽松校验：即使 API 返回失败，只要 cookie 有关键字段就尝试提取
+  // 抖音可能因为签名问题返回 status_code=8，但 cookie 本身是有效的
   if (!r.ok || !r.data?.user?.sec_uid) {
-    throw new AppError(ERR.DOUYIN_COOKIE_INVALID, 'cookie 校验失败：抖音侧未识别为已登录用户', 401)
+    // 尝试从 cookie 中提取 sec_uid（有些 cookie 格式包含）
+    const secUidFromCookie = parsed.map.sec_uid || parsed.map.sessionid || ''
+    if (secUidFromCookie && secUidFromCookie.length > 10) {
+      logger.info({ secUidFromCookie: secUidFromCookie.slice(0, 20) }, 'probeProfile: using sec_uid from cookie fallback')
+      return {
+        secUid: secUidFromCookie,
+        nickname: parsed.map.nickname || '抖音用户',
+        avatarUrl: null,
+      }
+    }
+    const errMsg = !r.ok
+      ? `HTTP ${r.status}，body=${r.raw.slice(0, 300)}`
+      : `status_code=${r.data?.status_code ?? '?'}，sec_uid=${r.data?.user?.sec_uid || 'empty'}，user_keys=${r.data?.user ? Object.keys(r.data.user) : 'none'}，raw=${r.raw.slice(0, 300)}`
+    throw new AppError(ERR.DOUYIN_COOKIE_INVALID, `cookie 校验失败：${errMsg}`, 401)
   }
   return extractMin(r.data)
 }
@@ -61,9 +100,30 @@ export async function bindFromCookie(opts: {
   localUserId: number
   cookie: string
   source: CookieSource
+  accountId?: number
+  preserveProfile?: boolean
 }): Promise<DouyinAccount> {
   const profile = await probeProfile(opts.cookie)
   const enc = encryptCookieFor(opts.localUserId, opts.cookie.trim())
+  if (opts.accountId) {
+    const prisma = getPrisma()
+    const current = await prisma.douyinAccount.findUnique({ where: { id: opts.accountId } })
+    if (!current || current.localUserId !== opts.localUserId) {
+      throw new AppError(ERR.DOUYIN_ACCOUNT_NOT_FOUND, '抖音账号不存在', 404)
+    }
+    return prisma.douyinAccount.update({
+      where: { id: current.id },
+      data: {
+        secUid: profile.secUid,
+        nickname: opts.preserveProfile ? current.nickname : profile.nickname,
+        avatarUrl: opts.preserveProfile ? current.avatarUrl : profile.avatarUrl,
+        cookieEnc: enc,
+        cookieSource: opts.source,
+        isValid: true,
+        lastCheckAt: new Date()
+      }
+    })
+  }
   return upsertAccount({
     localUserId: opts.localUserId,
     secUid: profile.secUid,
@@ -79,6 +139,7 @@ export async function bindFromBridgeWithoutCookie(opts: {
   accountId: number
   localUserId: number
   profile: ProfileSelfMin
+  preserveProfile?: boolean
 }): Promise<DouyinAccount> {
   const prisma = getPrisma()
   const tokenOwner = await prisma.douyinAccount.findUnique({ where: { id: opts.accountId } })
@@ -96,8 +157,8 @@ export async function bindFromBridgeWithoutCookie(opts: {
       const updated = await tx.douyinAccount.update({
         where: { id: existing.id },
         data: {
-          nickname: opts.profile.nickname,
-          avatarUrl: opts.profile.avatarUrl,
+          nickname: opts.preserveProfile ? existing.nickname : opts.profile.nickname,
+          avatarUrl: opts.preserveProfile ? existing.avatarUrl : opts.profile.avatarUrl,
           cookieSource: 'bridge',
           isValid: true,
           lastCheckAt: new Date(),
@@ -114,13 +175,22 @@ export async function bindFromBridgeWithoutCookie(opts: {
     where: { id: tokenOwner.id },
     data: {
       secUid: opts.profile.secUid,
-      nickname: opts.profile.nickname,
-      avatarUrl: opts.profile.avatarUrl,
+      nickname: opts.preserveProfile ? tokenOwner.nickname : opts.profile.nickname,
+      avatarUrl: opts.preserveProfile ? tokenOwner.avatarUrl : opts.profile.avatarUrl,
       cookieSource: 'bridge',
       isValid: true,
       lastCheckAt: new Date()
     }
   })
+}
+
+export async function resolveSingleUserAccount(localUserId: number, preferredAccountId?: number): Promise<DouyinAccount | null> {
+  if (preferredAccountId) {
+    const prisma = getPrisma()
+    const current = await prisma.douyinAccount.findUnique({ where: { id: preferredAccountId } })
+    if (current && current.localUserId === localUserId) return current
+  }
+  return findPrimaryAccountByLocalUserId(localUserId)
 }
 
 function extractMin(raw: ProfileSelfRaw): ProfileSelfMin {

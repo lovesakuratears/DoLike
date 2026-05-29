@@ -13,10 +13,7 @@ request.interceptors.request.use(
       // authorization: token || ''
     } as unknown as AxiosRequestHeaders
 
-    //等于post请求，且请求参数为对象
-    if (config.method === 'post') {
-      config.headers['Content-Type'] = 'application/x-www-form-urlencoded'
-    }
+    // 保持 axios 默认的 application/json，后端 Fastify 按 JSON 解析
 
     return config
   },
