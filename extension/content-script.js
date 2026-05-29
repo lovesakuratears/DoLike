@@ -39,7 +39,16 @@ function sendAction(payload, successText) {
   }
   console.log('[DoList] sendAction:', payload.type, payload.linkKind || '')
   flash('处理中…', '#444')
+  let settled = false
+  const timer = setTimeout(() => {
+    if (settled) return
+    settled = true
+    flash(`${payload.type === 'init' ? '绑定' : '推送'}超时：后台 Service Worker 未响应，请检查扩展日志', '#d24a52`)
+  }, 12000)
   chrome.runtime.sendMessage(payload, resp => {
+    if (settled) return
+    settled = true
+    clearTimeout(timer)
     if (chrome.runtime.lastError) {
       flash(`扩展通信失败：${chrome.runtime.lastError.message}`, '#d24a52')
       return

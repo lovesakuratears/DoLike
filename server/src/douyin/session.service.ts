@@ -37,12 +37,23 @@ export async function validate(localUserId: number, account: DouyinAccount): Pro
     await markValidity(account.id, false)
     return false
   }
-  // ★ 插件推送的 cookie 不做严格 API 校验（chrome.cookies 可能不完整）
-  // 校验推迟到实际使用时通过 BrowserSession 验证
+  // ★ 插件推送的 cookie：首次绑定跳过严格 API 校验
+  // chrome.cookies 可能拿不全 HttpOnly 字段导致第一轮 API 调用失败，
+  // 但用户已确认 cookie 在浏览器里能用。首次绑定信任浏览器状态。
+  // 后续手动「校验 cookie」时再做真实 API 检测，避免过期 cookie 永久标记为有效。
   if (account.cookieSource === 'bridge') {
-    getLogger().info('[DoList] validate: skipping strict check for bridge cookie, marking valid')
-    await markValidity(account.id, true)
-    return true
+    // 首次绑定（lastCheckAt == null）：跳过 API 校验，信任浏览器 cookie
+    if (!account.lastCheckAt) {
+      getLogger().info({ accountId: account.id }, '[DoList] validate: first bind for bridge cookie, trusting browser state')
+      await markValidity(account.id, true)
+      return true
+    }
+    // 后续校验：实际走 API。如果 cookie 过期了，标记为无效让用户重新推送。
+    getLogger().info({ accountId: account.id }, '[DoList] validate: re-checking bridge cookie via API')
+    const r = await getProfileSelf(cookie)
+    const ok = r.ok && !!r.data?.user?.sec_uid
+    await markValidity(account.id, ok)
+    return ok
   }
   const r = await getProfileSelf(cookie)
   const ok = r.ok && !!r.data?.user?.sec_uid
@@ -52,20 +63,27 @@ export async function validate(localUserId: number, account: DouyinAccount): Pro
 
 export async function probeProfile(cookie: string): Promise<ProfileSelfMin> {
   const parsed = parseCookieString(cookie)
-  // ★ 宽松校验：只检查 sessionid 或 ttwid 存在即可，不要求所有字段
-  // chrome.cookies 可能拿不到所有 HttpOnly 字段，不能因为缺少非关键字段就拒绝
-  const hasSession = parsed.map.sessionid || parsed.map.ttwid || parsed.map['passport_csrf_token']
-  if (!hasSession) {
+  // ★ 宽松校验：至少需要 sessionid（登录态核心字段）
+  // 允许 ttwid/passport_csrf_token 作为辅助兜底——chrome.cookies 在特定 MV3 配置
+  // 下可能拿不到 HttpOnly 的 sessionid，但 ttwid（非 HttpOnly）总可以拿到。
+  // 如果只有 ttwid 没有 sessionid，大概率 cookie 不完整，给出具体的行动指引。
+  const hasSession = parsed.map.sessionid
+  const hasTracking = parsed.map.ttwid
+  if (!hasSession && !hasTracking) {
     throw new AppError(
       ERR.DOUYIN_COOKIE_INCOMPLETE,
-      `cookie 缺少关键字段（sessionid/ttwid），请重新登录抖音`,
+      `cookie 缺少关键字段（sessionid/ttwid），请确认已在抖音页面登录后重新推送`,
       400
     )
   }
   const r = await getProfileSelf(cookie)
   // ★ 诊断日志：打印抖音 API 返回的关键字段
-  const log = await import('../core/logger.js')
-  const logger = (await log).getLogger().child({ mod: 'cookie-probe' })
+  const { getLogger } = await import('../core/logger.js')
+  const logger = getLogger().child({ mod: 'cookie-probe' })
+
+  if (!hasSession && hasTracking) {
+    logger.warn({ cookieKeys: Object.keys(parsed.map) }, 'probeProfile: only ttwid found, no sessionid — cookie likely incomplete')
+  }
   logger.info({
     ok: r.ok,
     status: r.status,
@@ -78,10 +96,13 @@ export async function probeProfile(cookie: string): Promise<ProfileSelfMin> {
   // ★ 宽松校验：即使 API 返回失败，只要 cookie 有关键字段就尝试提取
   // 抖音可能因为签名问题返回 status_code=8，但 cookie 本身是有效的
   if (!r.ok || !r.data?.user?.sec_uid) {
-    // 尝试从 cookie 中提取 sec_uid（有些 cookie 格式包含）
-    const secUidFromCookie = parsed.map.sec_uid || parsed.map.sessionid || ''
-    if (secUidFromCookie && secUidFromCookie.length > 10) {
-      logger.info({ secUidFromCookie: secUidFromCookie.slice(0, 20) }, 'probeProfile: using sec_uid from cookie fallback')
+    // 尝试从 cookie 中提取 sec_uid
+    // ⚠️ 仅用 parsed.map.sec_uid —— 绝对不能用 sessionid/ttwid 冒充 sec_uid！
+    // sessionid 是会话标识（形如 abc123...），而 sec_uid 是固定用户标识（形如 MS4wLjABAAAA...）
+    const secUidFromCookie = parsed.map.sec_uid || ''
+    const SEC_UID_PATTERN = /^[A-Za-z0-9_-]{30,}$/
+    if (secUidFromCookie && SEC_UID_PATTERN.test(secUidFromCookie)) {
+      logger.warn({ secUidFromCookie: secUidFromCookie.slice(0, 20) }, 'probeProfile: using sec_uid from cookie fallback')
       return {
         secUid: secUidFromCookie,
         nickname: parsed.map.nickname || '抖音用户',

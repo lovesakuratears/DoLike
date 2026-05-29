@@ -133,7 +133,14 @@ async function actionInit() {
 // ★ 推送 Cookie —— 仅采集并推送 cookie，不推送列表
 // 标记: ACTION_PUSH_COOKIE
 async function actionPushCookie() {
-  // ★ 先采集 cookie（不依赖页面状态）
+  // ★ 检查抖音页面是否打开（仅警告，不阻塞）
+  // chrome.cookies.getAll 不依赖页面状态，但无活跃标签页时返回的可能是过期 cookie
+  const tab = await findDouyinTab()
+  if (!tab) {
+    console.warn('[DoLike] actionPushCookie: no douyin tab found — collected cookie may be stale')
+  }
+
+  // ★ 先采集 cookie
   let collectedCookie = ''
   try {
     const cookieResult = await collectCookiesMethod1('douyin.com')
