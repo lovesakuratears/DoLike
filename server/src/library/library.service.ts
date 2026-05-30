@@ -157,19 +157,12 @@ export async function listVideos(params: ListVideosParams): Promise<ListVideosRe
   if (params.length === 'long') where.durationSec = { gte: threshold }
   if (params.length === 'short') where.durationSec = { lt: threshold }
   if (params.q?.trim()) {
-    const ftsQuery = buildFtsQuery(params.q)
-    if (ftsQuery) {
-      const rows = await prisma.$queryRaw<Array<{ rowid: number }>>`
-        SELECT rowid
-        FROM content_search
-        WHERE content_search MATCH ${ftsQuery}
-      `
-      const ids = rows.map((row) => row.rowid)
-      if (ids.length === 0) {
-        return { total: 0, page, size, items: [] }
-      }
-      where.id = { in: ids }
-    }
+    const q = params.q.trim()
+    // 用 contains 子串匹配替代 FTS5 前缀匹配，实现「标题含任意字符即返回」
+    where.OR = [
+      { title: { contains: q } },
+      { authorName: { contains: q } },
+    ]
   }
 
   // 排序
@@ -643,7 +636,7 @@ export async function extractAudioFromVideo(
 
   // 2. 生成输出路径 —— 完全解耦，存放到 extracted-audio 目录
   await fs.mkdir(extractedAudioRoot, { recursive: true })
-  const safeName = (title || awemeId).replace(/[\\/:*?"<>|]/g, '_').slice(0, 80)
+  const safeName = (title || awemeId).replace(/[\\/:*?"<>|#]/g, '_').slice(0, 80)
   const audioFileName = safeName + '.mp3'
   const audioRelPath = audioFileName
   const audioFullPath = join(extractedAudioRoot, audioRelPath)

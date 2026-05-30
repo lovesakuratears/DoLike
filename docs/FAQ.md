@@ -1,215 +1,182 @@
-# DoLike 常见问题 (FAQ)
+# DoLike 常见问题解答 (FAQ)
 
-## 目录
+## 基础使用
 
-- [安装与启动](#安装与启动)
-- [账号绑定](#账号绑定)
-- [归档与下载](#归档与下载)
-- [浏览器扩展](#浏览器扩展)
-- [Cookie 相关](#cookie-相关)
-- [常见问题排查](#常见问题排查)
+### Q1: DoLike 是什么？和抖音官方客户端有什么区别？
+
+DoLike 是一个运行在本机的抖音个人归档工具，用于将你抖音账号下的视频、音频、合集等内容保存到本地硬盘，并提供离线浏览。它不是抖音的替代客户端——它只做"读取和备份"，不做发布、点赞、评论等写操作。
+
+### Q2: 我需要安装什么才能使用？
+
+需要 Node.js 20+ 和 pnpm 包管理器。项目自带 SQLite 数据库，无需额外安装数据库软件。浏览器扩展需要 Chrome 或 Edge 浏览器。
+
+### Q3: 数据存在哪里？
+
+默认存储在 `~/.dolike-archive/` 目录下。你可以在设置中修改数据目录路径。目录结构如下：
+
+```
+~/.dolike-archive/
+├── db/app.sqlite        # 元数据索引
+├── accounts/            # 各抖音账号的内容文件
+├── tmp/                 # 下载临时文件
+└── logs/                # 运行日志
+```
 
 ---
 
-## 安装与启动
+## 抖音接入
 
-### Q: 如何启动项目？
+### Q4: 为什么有三种登录方式？我该选哪个？
 
-需要同时启动后端和前端。
+三种方式互不替代、可以并存：
 
-**终端 1 — 后端：**
-```bash
-cd server
-pnpm install
-pnpm prisma:generate
-pnpm dev
-```
-看到 `Server listening at http://127.0.0.1:7777` 表示后端就绪。
+- **方案 A（扫码）**：最方便，后端自动启动无头浏览器打开抖音登录页，你扫码即可。需要安装 CloakBrowser 依赖（首次会自动下载约 200MB 的 Chromium）。
+- **方案 B（粘贴 Cookie）**：最稳的兜底方案。从 Chrome DevTools 复制完整 Cookie 字符串粘贴即可。适合扫码失败或不想装额外依赖的场景。
+- **方案 C（扩展）**：安装浏览器扩展后，在真实抖音页面上一键推送列表。即使 A/B 的 Cookie 失效，C 仍可正常工作。
 
-**终端 2 — 前端：**
-```bash
-cd web/packages/dolike-portal
-npx vite --mode staging --port 3002
-```
-看到 `Local: http://127.0.0.1:3002/` 表示前端就绪。
+默认推荐 A → B → C 的顺序尝试。
 
-浏览器打开 `http://127.0.0.1:3002`。
+### Q5: 如何从 Chrome 获取抖音 Cookie？
 
-### Q: 首次使用需要做什么？
+1. 在 Chrome 中登录 `douyin.com`
+2. 按 F12 打开 DevTools → Application → Cookies → `douyin.com`
+3. 复制所有 Cookie，整理成 `name1=value1; name2=value2; ...` 格式
+4. 粘贴到 DoLike 的 Cookie 输入框
 
-1. 打开 `http://127.0.0.1:3002`
-2. 注册本地账号（用户名 + 密码）
-3. 登录后进入「我的」页面
-4. 绑定抖音账号（见下方）
-5. 粘贴 Cookie
-6. 点击「增量归档」开始抓取
+或者直接使用扩展的 M2/M3/M4 Cookie 采集方式自动获取。
 
-### Q: 忘记本地账号密码怎么办？
+### Q6: Cookie 多久会失效？失效了怎么办？
 
-```bash
-cd server
-# 1. 生成新密码 hash
-node --input-type=module -e "
-import argon2 from 'argon2';
-const h = await argon2.hash('你的新密码', { type: argon2.argon2id });
-console.log(h);
-"
-# 2. 写入数据库（替换 <hash> 为上面的输出）
-sqlite3 prisma/dev.db "UPDATE LocalUser SET passwordHash='<hash>' WHERE id=1;"
-```
+抖音 Cookie 有效期不固定，通常数天到数周。DoLike 会在抓取失败时检测到 Cookie 失效并在前端提示。重新导入有效 Cookie 后，失败的下载任务会自动加入重试队列。
 
-修改密码后所有已登录会话会失效，需要重新登录。
+### Q7: 支持多个抖音账号吗？
 
----
-
-## 账号绑定
-
-### Q: 如何绑定抖音账号？
-
-有两种方式：
-
-**方式一：浏览器插件（推荐）**
-1. 在 Chrome 打开 `https://www.douyin.com/` 并登录
-2. 点击 DoLike 扩展图标 → 配置项目 URL 和 API Key
-3. 点击「绑定插件」→ 自动获取账号信息并绑定
-
-**方式二：手动粘贴 Cookie**
-1. 在 Chrome DevTools → Application → Cookies → `https://www.douyin.com`
-2. 复制完整 Cookie 字符串
-3. 粘贴到 portal 页面的 Cookie 输入框
-4. 点击「测试 Cookie」确认有效
-
-### Q: 绑定账号时提示 "cookie 校验失败"？
-
-`chrome.cookies API` 无法读取 HttpOnly 的 `sessionid`，因此插件采集的 cookie 不完整。
-
-**解决方法**：在 Chrome DevTools → Application → Cookies 中手动复制完整 Cookie 字符串，粘贴到 portal 页面。
-
-### Q: 支持绑定多个抖音账号吗？
-
-支持。重复绑定流程即可，每个抖音账号会独立管理。
+支持。一个本地账号下可以绑定多个抖音账号，每个账号的数据独立存储在不同的子目录中。
 
 ---
 
 ## 归档与下载
 
-### Q: 什么是全量归档和增量归档？
+### Q8: 全量归档和增量归档有什么区别？
 
-- **全量归档**：账号首次归档或本地无任何内容时自动触发，重新抓取所有内容
-- **增量归档**：本地已有内容时自动触发，只抓取新增内容
+- **全量归档**：重新抓取所有内容。适用于首次使用或账号内容不多时。
+- **增量归档**：仅抓取上次归档之后新增的内容，遇到已存在的记录即停止。适用于日常使用。
 
-系统会根据本地数据库中的内容数量自动判断模式，无需手动选择。
+系统会自动判断：账号无内容时走全量，有内容时走增量。你也可以手动选择模式。
 
-### Q: 归档按钮在哪里？
+### Q9: 下载速度慢怎么办？
 
-- 页面顶部右侧：「全量归档」或「增量归档」（自动判断）
-- 每个账号旁：暂停 / 继续 / 终止按钮（归档进行中时显示）
+下载并发数默认 3，你可以在设置中调高（最多建议不超过 5，过高可能触发抖音风控）。下载支持断点续传，中断后会自动恢复。
 
-### Q: 归档过程中可以暂停吗？
+### Q10: 为什么有些视频下载失败了？
 
-可以。点击「暂停」按钮，当前归档任务会暂停。点击「恢复下载」继续。
+常见原因：
 
-### Q: 终止归档后已下载的内容会丢失吗？
+1. **抖音视频链接过期**（通常 6-12 小时失效）：入队后未及时下载，下次增量同步时会重新发现。
+2. **Cookie 失效**：重新导入有效 Cookie 后，失败任务会自动重试。
+3. **网络问题**：下载队列支持 3 次自动重试，仍失败可手动重试。
 
-不会。终止后已下载的文件保留，支持断点续传。下次增量归档时会跳过已下载的内容。
+### Q11: 下载的视频文件存在哪里？
 
-### Q: 下载的文件保存在哪里？
+按照内容分类和发布时间组织：
 
-默认保存在 `~/.dolike-archive/` 目录下。
+```
+accounts/<douyin_sec_uid>/
+├── posts/2024/2024-08/<aweme_id>/video.mp4
+├── likes/...
+├── favorites/<folder_id>/...
+├── watch_later/...
+├── music/<music_id>/audio.mp3
+└── mixes/created/<mix_id>/...
+```
 
-### Q: 下载队列显示 "running: 0 / concurrency: 3" 是什么意思？
-
-表示下载队列已就绪，当前没有正在下载的任务，并发数为 3。当有新的内容需要下载时，会自动开始下载。
-
-### Q: 如何批量操作视频？
-
-在视频列表页面：
-- **全选**：选中当前页所有视频
-- **反选**：反转当前选中状态
-- **添加到收藏夹**：将选中视频添加到指定收藏夹
-- **删除**：软删除选中视频（可从隐藏列表恢复）
+同一视频出现在多个分类（如既在作品又在喜欢）时使用硬链接，不重复占用磁盘。
 
 ---
 
 ## 浏览器扩展
 
-### Q: 如何加载扩展？
+### Q12: 浏览器扩展需要上架 Chrome Web Store 吗？
 
-1. 打开 `chrome://extensions/`
-2. 右上角开启「开发者模式」
-3. 点击「加载已解压的扩展程序」
-4. 选择 `extension/` 目录
+不需要。扩展仅供本地使用，直接在 `chrome://extensions/` 中以"开发者模式"加载即可。扩展不上架公开商店。
 
-### Q: 扩展需要配置什么？
+### Q13: 扩展的四种 Cookie 采集方式有什么区别？
 
-- **项目 URL**：`http://127.0.0.1:7777`
-- **API Key**：在 portal 页面生成的 `pt_` 开头的字符串
+| 方法 | 能拿 HttpOnly Cookie | 适用场景 |
+| --- | :---: | --- |
+| M1 chrome.cookies API | 否 | 最简单，只需点击即可 |
+| M2 webRequest 拦截 | 是 | 需先访问抖音页面 |
+| M3 CDP 远程调试 | 是 | 需 Chrome 以 `--remote-debugging-port=9222` 启动 |
+| M4 Native Messaging | 是 | 最强，需安装本地 Python 脚本 |
 
-### Q: 扩展的 Cookie 采集方式有什么区别？
-
-| 方式 | 说明 | 能拿 HttpOnly |
-|------|------|:---:|
-| M1 chrome.cookies API | 默认使用，最简单 | ❌ |
-| M2 webRequest 拦截 | 从请求头读取 | ✅ |
-| M3 CDP 远程调试 | 需 `--remote-debugging-port=9222` | ✅ |
-| M4 Native Messaging | 需安装本地 Python 客户端 | ✅ |
-
-M1 为当前默认方式。M2/M3/M4 在扩展弹窗底部「高级 Cookie 采集方式」折叠区，仅在需要时使用。
+大多数场景下 M1 已足够，因为抖音的关键鉴权字段可能不全是 HttpOnly。如需完整 Cookie，推荐 M2 或 M3。
 
 ---
 
-## Cookie 相关
+## 播放与浏览
 
-### Q: 为什么必须要有 Cookie？
+### Q14: 本地播放器支持什么格式？
 
-Cookie 是抖音登录态的凭证。后端需要用 Cookie 调用抖音 API 抓取内容列表和下载视频。没有 Cookie 或 Cookie 失效，归档会失败。
+播放器基于 xgplayer，支持 MP4 视频格式。后端通过 HTTP Range 实现流式播放，支持拖拽进度条。本地文件不可用时自动回退到抖音线上链接。
 
-### Q: Cookie 会过期吗？
+### Q15: 搜索功能支持什么？
 
-会。抖音 Cookie 通常有效期为数天到数周。过期后需要重新粘贴。
-
-### Q: 如何测试 Cookie 是否有效？
-
-在 portal 页面点击账号旁的「测试 Cookie」按钮。有效时提示「Cookie 有效 ✓」，失效时提示「Cookie 已失效」。
-
-### Q: Cookie 安全吗？
-
-Cookie 使用 AES-256-GCM 加密后存储在本地 SQLite 数据库中，不会明文落盘。服务仅监听 `127.0.0.1`，不对外部网络开放。
+全文搜索（基于 SQLite FTS5），支持匹配视频标题、描述、作者昵称、音乐标题。同时支持按长短视频（阈值 60s，可调）和发布时间筛选。
 
 ---
 
-## 常见问题排查
+## 故障排查
 
-### Q: 页面打不开（502 / ERR_CONNECTION_REFUSED）？
+### Q16: 启动后端报端口被占用
 
-1. 确认后端是否在运行：`curl http://127.0.0.1:7777/api/health`
-2. 确认前端是否在运行：`curl http://127.0.0.1:3002/`
-3. 检查端口是否被占用：`lsof -i :7777 -i :3002`
+默认端口 7777。可通过环境变量 `PORT=其他端口` 修改。注意修改后前端 Vite 代理配置和扩展配置也需要同步更新。
 
-### Q: 归档报错 "无可用 cookie"？
+### Q17: 数据库如何重置？
 
-账号未绑定 Cookie 或 Cookie 已失效。解决方法：
-1. 在 Chrome DevTools 复制完整 Cookie
-2. 粘贴到 portal 页面
-3. 点击「测试 Cookie」确认有效
-4. 重新触发归档
+```bash
+cd server
+# 清空归档数据（保留本地账号和抖音账号绑定）
+sqlite3 prisma/dev.db "DELETE FROM Content; DELETE FROM ContentLink; DELETE FROM DownloadTask;"
 
-### Q: 归档报错 "reply.status is not a function"？
+# 完全重置（删除数据库文件，重新迁移）
+rm prisma/dev.db
+pnpm prisma:migrate
+```
 
-这是已知 bug，GET 接口缺少 `reply` 参数导致。已修复，重启后端即可。
+### Q18: 如何修改本地账号密码？
 
-### Q: 视频列表为空？
+在前端设置页面直接修改，或通过命令行重置（如果忘记了密码）：
 
-1. 确认已绑定抖音账号
-2. 确认 Cookie 有效
-3. 确认已触发过归档
-4. 检查后端日志是否有报错
+```bash
+cd server
+node --input-type=module -e "
+import argon2 from 'argon2';
+const h = await argon2.hash('新密码', { type: argon2.argon2id });
+console.log(h);
+"
+# 将输出的 hash 写入数据库
+sqlite3 prisma/dev.db "UPDATE LocalUser SET passwordHash='<hash>' WHERE id=1;"
+```
 
-### Q: 下载速度慢？
+---
 
-下载队列并发数默认为 3。可以在「设置 → 下载模式」中调整。
+## 安全与隐私
 
-### Q: 如何反馈问题？
+### Q19: 我的抖音 Cookie 安全吗？
 
-- GitHub Issues：[github.com/lovesakuratears/DoLike/issues/new](https://github.com/lovesakuratears/DoLike/issues/new)
-- 设置面板 → 意见反馈
+安全。Cookie 通过以下方式保护：
+
+1. 使用本地账号密码经 `scrypt` 派生加密密钥
+2. 使用 `aes-256-gcm` 加密后存入 SQLite
+3. 不写入日志、不通过网络传输
+4. 后端仅监听 `127.0.0.1`，外网无法访问
+
+### Q20: 使用 DoLike 会被抖音封号吗？
+
+DoLike 的设计原则是"尽可能像正常用户"。抓取使用真实浏览器 Cookie 和 UA，下载并发可控。但任何第三方工具都存在一定风险，建议：
+
+- 不要将下载并发数调得过高（建议 ≤ 5）
+- 不要频繁全量归档（日常使用增量即可）
+- 不要将归档内容公开分发
+
+本工具仅供个人备份使用，使用风险自负。

@@ -465,7 +465,7 @@ document.title = '都喜欢-DoLike'
 
 <style lang="scss" scoped>
 .my-page {
-  padding: 28px 32px 40px;
+  padding: 28px 32px 80px; // 底部留 80px 给音频播放器 mini-bar（约 64px 高），避免遮挡分页按钮
   // 父级 .right-container 是 overflow:hidden + height:100%（layout/index.vue 全局约定），
   // 这里把自己撑满父亲并打开纵向滚动，避免列表/分页按钮被裁掉。
   height: 100%;
@@ -838,7 +838,7 @@ document.title = '都喜欢-DoLike'
   }
 
   @media (max-width: 768px) {
-    padding: 20px 16px 32px;
+    padding: 20px 16px 72px; // 底部留空间给播放器
 
     .my-header {
       padding: 20px;
